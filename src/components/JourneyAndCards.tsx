@@ -18,9 +18,11 @@ import {
   CompetitionSettings,
   AppView,
   ChallengeGameId,
+  CompetitionAward,
 } from '../types/competition';
-import { JOURNEY_NODES, OFFICIAL_AWARDS } from '../data/challengesData';
+import { JOURNEY_NODES } from '../data/challengesData';
 import { soundEngine } from '../utils/sound';
+import victoryTrophyImg from '../assets/images/victory_cup_trophy_1791274266991.jpg';
 
 // ==================== 1. 🧭 JOURNEY MAP VIEW ====================
 interface JourneyMapViewProps {
@@ -232,14 +234,302 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
   );
 };
 
-// ==================== 3. 🧩 TEAMS & 🏆 TOURNAMENT BRACKET & 📊 LEADERBOARD ====================
+// ==================== 3. 🏅 AWARDS SHOWCASE VIEW (صفحة جوائز وألقاب المسابقة) ====================
+interface AwardsShowcaseViewProps {
+  awards: CompetitionAward[];
+  students: StudentProfile[];
+  teams: Team[];
+  onGoToAdminAwards: () => void;
+}
+
+export const AwardsShowcaseView: React.FC<AwardsShowcaseViewProps> = ({
+  awards,
+  students,
+  teams,
+  onGoToAdminAwards,
+}) => {
+  const [filterMode, setFilterMode] = React.useState<'all' | 'awarded' | 'student' | 'team'>('all');
+  const [selectedCertAward, setSelectedCertAward] = React.useState<CompetitionAward | null>(null);
+
+  const resolveWinnerDetails = (award: CompetitionAward) => {
+    if (!award.winnerType || !award.winnerId) return null;
+    if (award.winnerType === 'student') {
+      const stu = students.find((s) => s.id === award.winnerId);
+      if (!stu) return null;
+      return {
+        typeLabel: 'طالب فائز باللقب',
+        name: stu.name,
+        subLabel: `الصف ${stu.grade === '4' ? 'الرابع' : stu.grade === '5' ? 'الخامس' : 'السادس'} الابتدائي · الفصل ${stu.className}`,
+        scoreLabel: `${stu.scores.total} نقطة`,
+        codeOrEmblem: stu.participationCode,
+      };
+    } else {
+      const tm = teams.find((t) => t.id === award.winnerId);
+      if (!tm) return null;
+      const captain = tm.members.find((m) => m.id === tm.captainId) || tm.members[0];
+      return {
+        typeLabel: 'فريق متوّج باللقب',
+        name: tm.name,
+        subLabel: `القائد: ${captain?.name || 'غير محدد'} · (${tm.members.length} أعضاء)`,
+        scoreLabel: `${tm.points} نقطة`,
+        codeOrEmblem: tm.emblem,
+      };
+    }
+  };
+
+  const filteredAwards = awards.filter((aw) => {
+    if (filterMode === 'awarded') return Boolean(aw.winnerId && aw.winnerType);
+    if (filterMode === 'student') return aw.winnerType === 'student';
+    if (filterMode === 'team') return aw.winnerType === 'team';
+    return true;
+  });
+
+  const awardedCount = awards.filter((a) => Boolean(a.winnerId && a.winnerType)).length;
+
+  return (
+    <section className="space-y-8">
+      {/* Header Banner */}
+      <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-l from-[#17284A] via-[#131F38] to-[#0F172A] border border-amber-400/40 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="flex items-center gap-5">
+          <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-amber-400/60 shrink-0 hidden sm:block">
+            <img
+              src={victoryTrophyImg}
+              alt="جوائز عباقرة عيون مصر"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-amber-400">
+              🏅 منصة التتويج والأوسمة الرسمية — مدرسة عيون مصر
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
+              جوائز وألقاب «عباقرة عيون مصر» العشرة
+            </h2>
+            <p className="text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
+              لا تقتصر البطولة على المركز الأول فقط؛ بل نحتفي بكل موهبة في المنطق، العلوم، الحساب، اللغة، دقة الملاحظة، سرعة البديهة، وروح الفريق.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 shrink-0 no-print">
+          <div className="px-4 py-2.5 rounded-xl bg-slate-950/90 border border-slate-800 text-center">
+            <div className="text-[11px] text-slate-400">الألقاب الممنوحة</div>
+            <div className="text-lg font-bold font-mono-num text-amber-400">
+              {awardedCount} / {awards.length}
+            </div>
+          </div>
+          <button
+            onClick={onGoToAdminAwards}
+            className="px-4 py-3 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 transition-colors whitespace-nowrap"
+          >
+            🛠️ تخصيص الفائزين من لوحة المشرف
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800 no-print">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-xl">
+          {(
+            [
+              { id: 'all', label: 'جميع الألقاب (10)' },
+              { id: 'awarded', label: 'الألقاب الممنوحة' },
+              { id: 'student', label: 'فائزون أفراد (طلاب)' },
+              { id: 'team', label: 'فرق متوجة' },
+            ] as const
+          ).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setFilterMode(tab.id)}
+              className={`px-3.5 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${
+                filterMode === tab.id
+                  ? 'bg-amber-400 text-slate-950'
+                  : 'text-slate-300 hover:text-white'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => window.print()}
+          className="px-4 py-2 rounded-xl bg-slate-800 text-slate-200 hover:text-white text-xs font-semibold flex items-center gap-2"
+        >
+          <Printer className="w-4 h-4 text-amber-400" />
+          <span>طباعة قائمة الجوائز الرسمية</span>
+        </button>
+      </div>
+
+      {/* 10 Awards Showcase Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredAwards.map((award, idx) => {
+          const winner = resolveWinnerDetails(award);
+          return (
+            <div
+              key={award.id}
+              className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
+                winner
+                  ? 'bg-[#131F38] border-amber-400/50 shadow-lg'
+                  : 'bg-[#111C35]/80 border-slate-800'
+              }`}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-amber-400/40 flex items-center justify-center text-3xl shrink-0">
+                      {award.icon}
+                    </div>
+                    <div>
+                      <div className="text-xs text-slate-400 flex items-center gap-2">
+                        <span className="font-mono-num">وسام 0{idx + 1}</span>
+                        <span>·</span>
+                        <span className="text-amber-400 font-semibold">
+                          {award.awardedAt || 'موسم ٢٠٢٦'}
+                        </span>
+                      </div>
+                      <h3 className="text-xl font-bold text-white font-display mt-0.5">
+                        {award.title}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {winner ? (
+                    <span className="px-2.5 py-1 rounded-md bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-[11px] font-bold whitespace-nowrap">
+                      ✓ تم التتويج
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-md bg-slate-900 border border-slate-700 text-slate-400 text-[11px] whitespace-nowrap">
+                      بانتظار الحسم
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-300 mt-3 leading-relaxed">{award.desc}</p>
+
+                {/* Winner Box */}
+                {winner ? (
+                  <div className="mt-5 p-4 rounded-xl bg-slate-900/95 border border-amber-400/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-amber-400 font-semibold">
+                        👑 {winner.typeLabel}
+                      </span>
+                      <span className="font-mono-num font-bold text-emerald-400">
+                        {winner.scoreLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-base font-bold text-white font-display">
+                          {winner.name}
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5">{winner.subLabel}</div>
+                      </div>
+                      <div className="px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono-num text-amber-300 font-bold">
+                        {winner.codeOrEmblem}
+                      </div>
+                    </div>
+                    {award.citationNote && (
+                      <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-300">
+                        <strong className="text-amber-300">سبب الاستحقاق:</strong> {award.citationNote}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-5 p-4 rounded-xl bg-slate-900/50 border border-slate-800/80 text-center text-xs text-slate-400">
+                    لم يتم ربط فائز بهذا اللقب بعد. يمكن للمشرف تعيين الطالب أو الفريق الفائز من لوحة التحكم.
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-between gap-3 no-print">
+                {winner ? (
+                  <button
+                    onClick={() => {
+                      soundEngine.playFanfare();
+                      setSelectedCertAward(award);
+                    }}
+                    className="text-xs font-bold text-amber-400 hover:underline flex items-center gap-1.5"
+                  >
+                    <Award className="w-4 h-4" />
+                    <span>عرض شهادة اللقب الفخرية</span>
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-500">متاح للطلاب والفرق</span>
+                )}
+
+                <button
+                  onClick={onGoToAdminAwards}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  تعديل الفائز ←
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Printable Certificate Modal for Selected Award */}
+      {selectedCertAward && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-b from-[#17284A] to-[#0B1120] border-2 border-amber-400 p-8 text-center space-y-5 shadow-2xl">
+            <div className="text-5xl">{selectedCertAward.icon}</div>
+            <div className="text-xs font-bold text-amber-400">
+              🏆 مدرسة عيون مصر · شهادة استحقاق لقب رسمي
+            </div>
+            <h3 className="text-3xl font-bold text-white font-display">
+              وسام «{selectedCertAward.title}»
+            </h3>
+            {(() => {
+              const w = resolveWinnerDetails(selectedCertAward);
+              if (!w) return null;
+              return (
+                <div className="p-5 rounded-2xl bg-slate-900/90 border border-amber-400/40 space-y-2">
+                  <div className="text-xs text-slate-400">يُمنح بكل فخر واعتزاز إلى:</div>
+                  <div className="text-2xl font-bold text-amber-400 font-display">{w.name}</div>
+                  <div className="text-xs text-slate-300">{w.subLabel}</div>
+                  {selectedCertAward.citationNote && (
+                    <p className="text-xs text-emerald-300 pt-2">
+                      «{selectedCertAward.citationNote}»
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+            <div className="flex items-center justify-center gap-3 pt-2 no-print">
+              <button
+                onClick={() => window.print()}
+                className="px-6 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2"
+              >
+                <Printer className="w-4 h-4" />
+                <span>طباعة الشهادة</span>
+              </button>
+              <button
+                onClick={() => setSelectedCertAward(null)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-bold"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ==================== 4. 🧩 TEAMS & 🏆 TOURNAMENT BRACKET & 📊 LEADERBOARD ====================
 interface TournamentAndLeaderboardProps {
   mode: 'teams' | 'tournament' | 'leaderboard' | 'how_to_play';
   teams: Team[];
   students: StudentProfile[];
   matches: MatchItem[];
   settings: CompetitionSettings;
+  awards: CompetitionAward[];
   onStartGameArena: () => void;
+  onOpenAwardsPage?: () => void;
 }
 
 export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> = ({
@@ -247,7 +537,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
   teams,
   students,
   settings,
+  awards,
   onStartGameArena,
+  onOpenAwardsPage,
 }) => {
   const sortedTeams = [...teams].sort((a, b) => b.points - a.points);
 
@@ -511,20 +803,49 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
 
           {/* 10 Official Awards Grid (🏅 ألقاب وجوائز المسابقة) */}
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-white font-display">
-              🏅 ألقاب وجوائز التميز في «عباقرة عيون مصر»
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-              {OFFICIAL_AWARDS.map((aw) => (
-                <div
-                  key={aw.id}
-                  className="p-4 rounded-xl bg-[#131F38] border border-slate-800 flex flex-col justify-between"
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-xl font-bold text-white font-display">
+                🏅 ألقاب وجوائز التميز في «عباقرة عيون مصر»
+              </h3>
+              {onOpenAwardsPage && (
+                <button
+                  onClick={onOpenAwardsPage}
+                  className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300"
                 >
-                  <div className="text-2xl mb-1">{aw.icon}</div>
-                  <div className="text-sm font-bold text-white font-display">{aw.title}</div>
-                  <p className="text-[11px] text-slate-400 mt-1">{aw.desc}</p>
-                </div>
-              ))}
+                  عرض صفحة الجوائز والفائزين الكاملة ←
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              {awards.map((aw) => {
+                const winnerStu =
+                  aw.winnerType === 'student'
+                    ? students.find((s) => s.id === aw.winnerId)?.name
+                    : null;
+                const winnerTeam =
+                  aw.winnerType === 'team'
+                    ? teams.find((t) => t.id === aw.winnerId)?.name
+                    : null;
+                const winnerLabel = winnerStu || winnerTeam;
+                return (
+                  <div
+                    key={aw.id}
+                    onClick={onOpenAwardsPage}
+                    className="p-4 rounded-xl bg-[#131F38] border border-slate-800 hover:border-amber-400/50 transition-all cursor-pointer flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="text-2xl mb-1">{aw.icon}</div>
+                      <div className="text-sm font-bold text-white font-display">{aw.title}</div>
+                      <p className="text-[11px] text-slate-400 mt-1">{aw.desc}</p>
+                    </div>
+                    {winnerLabel && (
+                      <div className="mt-3 pt-2 border-t border-slate-800 text-[11px] text-amber-400 font-bold truncate">
+                        👑 {winnerLabel}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </>

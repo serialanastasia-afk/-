@@ -25,6 +25,7 @@ import {
   QualifierQuestion,
   CompetitionSettings,
   MatchItem,
+  CompetitionAward,
 } from './types/competition';
 import {
   INITIAL_DEMO_STUDENTS,
@@ -32,14 +33,16 @@ import {
   INITIAL_SETTINGS,
   INITIAL_MATCHES,
   GENIUS_ALARM_QUESTIONS,
+  OFFICIAL_AWARDS,
 } from './data/challengesData';
 import { QualifiersAndPractice } from './components/QualifiersAndPractice';
 import { GamesArenaHub } from './components/GamesArenaHub';
-import { AdminDashboard } from './components/AdminDashboard';
+import { AdminDashboard, AdminSection } from './components/AdminDashboard';
 import {
   JourneyMapView,
   GeniusCardView,
   TournamentAndLeaderboard,
+  AwardsShowcaseView,
 } from './components/JourneyAndCards';
 import { soundEngine } from './utils/sound';
 
@@ -50,10 +53,12 @@ const STORAGE_STUDENTS = 'om_geniuses_students_v2';
 const STORAGE_TEAMS = 'om_geniuses_teams_v2';
 const STORAGE_SETTINGS = 'om_geniuses_settings_v2';
 const STORAGE_CUSTOM_QS = 'om_geniuses_custom_qs_v2';
+const STORAGE_AWARDS = 'om_geniuses_awards_v2';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [selectedGameTab, setSelectedGameTab] = useState<ChallengeGameId>('falcon_eye');
+  const [adminInitialSection, setAdminInitialSection] = useState<AdminSection>('students');
   const [unlockedJourneyIdx, setUnlockedJourneyIdx] = useState<number>(3);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -89,6 +94,14 @@ export default function App() {
       if (saved) return JSON.parse(saved);
     } catch {}
     return [];
+  });
+
+  const [awards, setAwards] = useState<CompetitionAward[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_AWARDS);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return OFFICIAL_AWARDS;
   });
 
   const [matches, setMatches] = useState<MatchItem[]>(INITIAL_MATCHES);
@@ -127,6 +140,12 @@ export default function App() {
       localStorage.setItem(STORAGE_CUSTOM_QS, JSON.stringify(customQuestions));
     } catch {}
   }, [customQuestions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_AWARDS, JSON.stringify(awards));
+    } catch {}
+  }, [awards]);
 
   const handleAwardTeamPoints = (teamId: string, delta: number) => {
     setTeams((prev) =>
@@ -239,7 +258,20 @@ export default function App() {
             لوحة الأبطال
           </button>
           <button
-            onClick={() => setCurrentView('admin')}
+            onClick={() => setCurrentView('awards')}
+            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
+              currentView === 'awards'
+                ? 'text-white border-amber-400 font-bold'
+                : 'border-transparent hover:text-white'
+            }`}
+          >
+            جوائز المسابقة
+          </button>
+          <button
+            onClick={() => {
+              setAdminInitialSection('students');
+              setCurrentView('admin');
+            }}
             className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
               currentView === 'admin'
                 ? 'text-white border-amber-400 font-bold'
@@ -291,6 +323,7 @@ export default function App() {
                 { id: 'games_hub', label: '🎮 الألعاب الـ11' },
                 { id: 'tournament', label: '🏆 البطولة النهائية' },
                 { id: 'leaderboard', label: '📊 لوحة الأبطال' },
+                { id: 'awards', label: '🏅 جوائز وألقاب البطولة' },
                 { id: 'how_to_play', label: 'ℹ️ كيف نلعب؟' },
                 { id: 'admin', label: '🛠️ لوحة المشرف' },
               ] as { id: AppView; label: string }[]
@@ -388,6 +421,13 @@ export default function App() {
                         className="px-5 py-3.5 rounded-xl bg-[#162647] border border-amber-400/50 text-white font-bold text-sm hover:bg-slate-800 transition-all flex items-center gap-2"
                       >
                         <span>🏆 لوحة الأبطال</span>
+                      </button>
+
+                      <button
+                        onClick={() => setCurrentView('awards')}
+                        className="px-5 py-3.5 rounded-xl bg-[#162647] border border-emerald-400/50 text-emerald-300 font-bold text-sm hover:bg-slate-800 transition-all flex items-center gap-2"
+                      >
+                        <span>🏅 جوائز وألقاب المسابقة</span>
                       </button>
 
                       <button
@@ -501,6 +541,19 @@ export default function App() {
           />
         )}
 
+        {/* ==================== 🏅 AWARDS SHOWCASE PAGE ==================== */}
+        {currentView === 'awards' && (
+          <AwardsShowcaseView
+            awards={awards}
+            students={students}
+            teams={teams}
+            onGoToAdminAwards={() => {
+              setAdminInitialSection('awards');
+              setCurrentView('admin');
+            }}
+          />
+        )}
+
         {/* ==================== 🧩 TEAMS / 🏆 TOURNAMENT / 📊 LEADERBOARD / ℹ️ HOW TO PLAY ==================== */}
         {(currentView === 'teams' ||
           currentView === 'tournament' ||
@@ -512,7 +565,9 @@ export default function App() {
             students={students}
             matches={matches}
             settings={settings}
+            awards={awards}
             onStartGameArena={() => setCurrentView('games_hub')}
+            onOpenAwardsPage={() => setCurrentView('awards')}
           />
         )}
 
@@ -529,6 +584,9 @@ export default function App() {
             setSettings={setSettings}
             matches={matches}
             setMatches={setMatches}
+            awards={awards}
+            setAwards={setAwards}
+            initialSection={adminInitialSection}
             onTriggerGeniusAlarm={handleTriggerAlarm}
           />
         )}

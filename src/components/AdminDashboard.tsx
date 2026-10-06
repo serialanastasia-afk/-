@@ -22,6 +22,7 @@ import {
   GradeNumber,
   QualifierDomain,
   DifficultyLevel,
+  CompetitionAward,
 } from '../types/competition';
 import { DOMAIN_META } from '../data/qualifierQuestions';
 import { soundEngine } from '../utils/sound';
@@ -37,10 +38,13 @@ interface AdminDashboardProps {
   setSettings: React.Dispatch<React.SetStateAction<CompetitionSettings>>;
   matches: MatchItem[];
   setMatches: React.Dispatch<React.SetStateAction<MatchItem[]>>;
+  awards: CompetitionAward[];
+  setAwards: React.Dispatch<React.SetStateAction<CompetitionAward[]>>;
+  initialSection?: AdminSection;
   onTriggerGeniusAlarm: () => void;
 }
 
-type AdminSection = 'students' | 'questions' | 'competition' | 'teams' | 'matches' | 'results';
+export type AdminSection = 'students' | 'questions' | 'competition' | 'teams' | 'awards' | 'matches' | 'results';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   students,
@@ -53,11 +57,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   setSettings,
   matches,
   setMatches,
+  awards,
+  setAwards,
+  initialSection = 'students',
   onTriggerGeniusAlarm,
 }) => {
-  const [section, setSection] = useState<AdminSection>('students');
+  const [section, setSection] = useState<AdminSection>(initialSection);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialSection) setSection(initialSection);
+  }, [initialSection]);
 
   // Add Student State
   const [stuName, setStuName] = useState('');
@@ -156,8 +167,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           [
             { id: 'students', label: '👨‍🎓 الطلاب والمتأهلون' },
             { id: 'questions', label: '❓ بنك الأسئلة' },
-            { id: 'competition', label: '⚙️ إعدادات المسابقة والحماية' },
             { id: 'teams', label: '🧩 إدارة الفرق والقادة' },
+            { id: 'awards', label: '🏅 ربط الجوائز والألقاب بالفائزين' },
+            { id: 'competition', label: '⚙️ إعدادات المسابقة والحماية' },
             { id: 'matches', label: '⚔️ إدارة المباريات المباشرة' },
             { id: 'results', label: '📊 التقارير والنتائج' },
           ] as { id: AdminSection; label: string }[]
@@ -710,6 +722,242 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 4.5 AWARDS & TITLES ASSIGNMENT SECTION */}
+      {section === 'awards' && (
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-white font-display">
+                🏅 تخصيص وربط جوائز المسابقة والألقاب العشرة بالفرق أو الطلاب الفائزين
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                اختر لكل لقب ما إذا كان الفائز به «طالباً» أو «فريقاً»، ثم حدد اسم الفائز وسبب الاستحقاق ليظهر فوراً في صفحة الجوائز ولوحة الأبطال وبطاقة الطالب.
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                // Auto-assign smart winners based on highest scores
+                const topStudent = [...students].sort((a, b) => b.scores.total - a.scores.total)[0];
+                const topLogic = [...students].sort((a, b) => b.scores.logic - a.scores.logic)[0];
+                const topSci = [...students].sort((a, b) => b.scores.science - a.scores.science)[0];
+                const topMath = [...students].sort((a, b) => b.scores.math - a.scores.math)[0];
+                const topArb = [...students].sort((a, b) => b.scores.arabic - a.scores.arabic)[0];
+                const topSpeed = [...students].sort((a, b) => b.scores.speedScore - a.scores.speedScore)[0];
+                const topTeam = [...teams].sort((a, b) => b.points - a.points)[0];
+
+                setAwards((prev) =>
+                  prev.map((aw) => {
+                    if (aw.id === 'aw-1' && topStudent)
+                      return { ...aw, winnerType: 'student', winnerId: topStudent.id };
+                    if (aw.id === 'aw-2' && topLogic)
+                      return { ...aw, winnerType: 'student', winnerId: topLogic.id };
+                    if (aw.id === 'aw-3' && topSci)
+                      return { ...aw, winnerType: 'student', winnerId: topSci.id };
+                    if (aw.id === 'aw-4' && topMath)
+                      return { ...aw, winnerType: 'student', winnerId: topMath.id };
+                    if (aw.id === 'aw-5' && topArb)
+                      return { ...aw, winnerType: 'student', winnerId: topArb.id };
+                    if (aw.id === 'aw-7' && topSpeed)
+                      return { ...aw, winnerType: 'student', winnerId: topSpeed.id };
+                    if ((aw.id === 'aw-8' || aw.id === 'aw-10') && topTeam)
+                      return { ...aw, winnerType: 'team', winnerId: topTeam.id };
+                    return aw;
+                  })
+                );
+                notify('تم التوزيع الذكي للألقاب تلقائياً بناءً على أعلى درجات الطلاب والفرق!');
+              }}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs whitespace-nowrap hover:bg-emerald-400"
+            >
+              ✨ توزيع الألقاب تلقائياً حسب الأعلى نقاطاً
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {awards.map((award) => {
+              const currentWinnerType = award.winnerType || 'none';
+
+              return (
+                <div
+                  key={award.id}
+                  className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4"
+                >
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="text-3xl">{award.icon}</span>
+                      <div>
+                        <h4 className="text-base font-bold text-white font-display">
+                          {award.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-400">{award.desc}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 1: Select Winner Type (Student / Team / Unassigned) */}
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultStuId = students[0]?.id || null;
+                        setAwards((prev) =>
+                          prev.map((a) =>
+                            a.id === award.id
+                              ? { ...a, winnerType: 'student', winnerId: defaultStuId }
+                              : a
+                          )
+                        );
+                        notify(`تم تحديد فئة (طالب فائز) للقب ${award.title}`);
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold border transition-all ${
+                        currentWinnerType === 'student'
+                          ? 'bg-amber-400 text-slate-950 border-amber-300'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      👨‍🎓 ربط بطالب
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const defaultTeamId = teams[0]?.id || null;
+                        setAwards((prev) =>
+                          prev.map((a) =>
+                            a.id === award.id
+                              ? { ...a, winnerType: 'team', winnerId: defaultTeamId }
+                              : a
+                          )
+                        );
+                        notify(`تم تحديد فئة (فريق فائز) للقب ${award.title}`);
+                      }}
+                      className={`py-2 px-3 rounded-xl font-bold border transition-all ${
+                        currentWinnerType === 'team'
+                          ? 'bg-sky-400 text-slate-950 border-sky-300'
+                          : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white'
+                      }`}
+                    >
+                      🧩 ربط بفريق
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAwards((prev) =>
+                          prev.map((a) =>
+                            a.id === award.id
+                              ? { ...a, winnerType: null, winnerId: null }
+                              : a
+                          )
+                        );
+                        notify(`تم إلغاء ربط لقب ${award.title}`);
+                      }}
+                      className={`py-2 px-3 rounded-xl font-semibold border transition-all ${
+                        currentWinnerType === 'none'
+                          ? 'bg-slate-800 text-white border-slate-600'
+                          : 'bg-slate-950 text-slate-500 border-slate-800 hover:text-slate-300'
+                      }`}
+                    >
+                      بدون فائز
+                    </button>
+                  </div>
+
+                  {/* Step 2: Select Specific Student or Team */}
+                  {award.winnerType === 'student' && (
+                    <div>
+                      <label className="block text-[11px] text-amber-400 font-semibold mb-1">
+                        اختر الطالب الفائز بلقب «{award.title}»:
+                      </label>
+                      <select
+                        value={award.winnerId || ''}
+                        onChange={(e) => {
+                          const newStuId = e.target.value;
+                          setAwards((prev) =>
+                            prev.map((a) =>
+                              a.id === award.id ? { ...a, winnerId: newStuId } : a
+                            )
+                          );
+                          // Also add badge to student's profile if not already present
+                          const badgeLabel = `${award.icon} ${award.title}`;
+                          setStudents((prev) =>
+                            prev.map((s) =>
+                              s.id === newStuId && !s.badges.includes(badgeLabel)
+                                ? { ...s, badges: [...s.badges, badgeLabel] }
+                                : s
+                            )
+                          );
+                          notify(`تم تتويج الطالب بلقب ${award.title} بنجاح!`);
+                        }}
+                        className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-amber-400/50 rounded-xl text-white"
+                      >
+                        {students.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name} — الصف {s.grade} ({s.className}) · [{s.scores.total} نقطة]
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {award.winnerType === 'team' && (
+                    <div>
+                      <label className="block text-[11px] text-sky-400 font-semibold mb-1">
+                        اختر الفريق الفائز بلقب «{award.title}»:
+                      </label>
+                      <select
+                        value={award.winnerId || ''}
+                        onChange={(e) => {
+                          const newTeamId = e.target.value;
+                          setAwards((prev) =>
+                            prev.map((a) =>
+                              a.id === award.id ? { ...a, winnerId: newTeamId } : a
+                            )
+                          );
+                          const badgeLabel = `${award.icon} ${award.title}`;
+                          setTeams((prev) =>
+                            prev.map((t) =>
+                              t.id === newTeamId ? { ...t, titleBadge: badgeLabel } : t
+                            )
+                          );
+                          notify(`تم تتويج الفريق بلقب ${award.title} بنجاح!`);
+                        }}
+                        className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-sky-400/50 rounded-xl text-white"
+                      >
+                        {teams.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} — ({t.points} نقطة · {t.wins} انتصارات)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Step 3: Citation / Reason Note */}
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">
+                      سبب الاستحقاق / كلمة التتويج في الشهادة:
+                    </label>
+                    <input
+                      type="text"
+                      value={award.citationNote || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setAwards((prev) =>
+                          prev.map((a) =>
+                            a.id === award.id ? { ...a, citationNote: val } : a
+                          )
+                        );
+                      }}
+                      placeholder="اكتب سبب منح الجائزة ليظهر في بطاقة التتويج..."
+                      className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-slate-200 focus:border-amber-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -112,8 +112,21 @@ export type AppView =
   | 'teams'
   | 'tournament'
   | 'leaderboard'
+  | 'awards'
   | 'how_to_play'
   | 'admin';
+
+export interface CompetitionAward {
+  id: string;
+  icon: string;
+  title: string;
+  desc: string;
+  categoryType: 'student' | 'team' | 'both';
+  winnerType?: 'student' | 'team' | null;
+  winnerId?: string | null;
+  citationNote?: string;
+  awardedAt?: string;
+}
 
 export interface CompetitionSettings {
   startDate: string;
