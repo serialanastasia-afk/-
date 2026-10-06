@@ -37,11 +37,16 @@ import {
   TournamentAndLeaderboard,
   AwardsShowcaseView,
 } from './components/JourneyAndCards';
+import {
+  STAGE_METADATA,
+  SEASON_STATUS_META,
+  runAutomatedRankingAndQualification,
+} from './services/qualificationEngine';
 import { soundEngine } from './utils/sound';
 
-const STORAGE_STUDENTS = 'om_geniuses_students_v2';
-const STORAGE_TEAMS = 'om_geniuses_teams_v2';
-const STORAGE_SETTINGS = 'om_geniuses_settings_v3';
+const STORAGE_STUDENTS = 'om_geniuses_students_v4';
+const STORAGE_TEAMS = 'om_geniuses_teams_v4';
+const STORAGE_SETTINGS = 'om_geniuses_settings_v5';
 const STORAGE_CUSTOM_QS = 'om_geniuses_custom_qs_v2';
 const STORAGE_AWARDS = 'om_geniuses_awards_v2';
 
@@ -49,7 +54,7 @@ const SUB_NAV_ITEMS: { id: AppView; label: string }[] = [
   { id: 'home', label: '🏠 الرئيسية' },
   { id: 'games_hub', label: '📺 استوديو برنامج العباقرة' },
   { id: 'teams', label: '🧩 الفرق (4 أو 5 لاعبين)' },
-  { id: 'qualifiers', label: '🟢 التصفيات الفردية' },
+  { id: 'qualifiers', label: '🟢 التصفيات الذاتية' },
   { id: 'practice', label: '🧠 جرّب تدريباً' },
   { id: 'journey', label: '🧭 خريطة الرحلة' },
   { id: 'genius_card', label: '🪪 بطاقة العبقري' },
@@ -57,7 +62,7 @@ const SUB_NAV_ITEMS: { id: AppView; label: string }[] = [
   { id: 'leaderboard', label: '📊 لوحة الأبطال' },
   { id: 'awards', label: '🏅 جوائز المسابقة' },
   { id: 'how_to_play', label: 'ℹ️ كيف نلعب؟' },
-  { id: 'admin', label: '🛠️ لوحة المشرف' },
+  { id: 'admin', label: '👩‍💼 لوحة المشرفة العامة' },
 ];
 
 const STATION_CODES = [
@@ -75,7 +80,7 @@ const STATION_CODES = [
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
   const [selectedGameTab, setSelectedGameTab] = useState<ChallengeGameId>('classic_board');
-  const [adminInitialSection, setAdminInitialSection] = useState<AdminSection>('students');
+  const [adminInitialSection, setAdminInitialSection] = useState<AdminSection>('overview');
   const [unlockedJourneyIdx, setUnlockedJourneyIdx] = useState<number>(2);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -255,7 +260,9 @@ export default function App() {
               OYOUN MISR
             </div>
             <div className="text-[11px] text-[rgba(242,239,235,0.65)] font-bold mt-0.5">
-              عباقرة مدرسة عيون مصر
+              {settings.defaultSchoolName
+                ? `${settings.defaultSchoolName}${settings.defaultRegion ? ` · ${settings.defaultRegion}` : ''}`
+                : 'مسابقة عباقرة عيون مصر · لجميع المدارس والمحافظات'}
             </div>
           </div>
         </div>
@@ -274,7 +281,7 @@ export default function App() {
             <button
               key={navItem.id}
               onClick={() => {
-                if (navItem.id === 'admin') setAdminInitialSection('students');
+                if (navItem.id === 'admin') setAdminInitialSection('overview');
                 setCurrentView(navItem.id);
               }}
               className={`bg-transparent border-none text-[0.8rem] font-bold cursor-pointer transition-colors ${
@@ -321,7 +328,7 @@ export default function App() {
             <button
               key={item.id}
               onClick={() => {
-                if (item.id === 'admin') setAdminInitialSection('students');
+                if (item.id === 'admin') setAdminInitialSection('overview');
                 setCurrentView(item.id);
               }}
               className={`whitespace-nowrap bg-transparent px-4 py-1.5 rounded text-[0.72rem] cursor-pointer transition-all border ${
@@ -405,7 +412,7 @@ export default function App() {
             </div>
 
             <p className="max-w-[520px] leading-[1.7] text-[rgba(242,239,235,0.6)] mb-5 text-sm sm:text-base">
-              مرحباً بك في البطولة التفاعلية الكبرى لطلاب المرحلة الابتدائية العليا بمدرسة عيون مصر! رحلة مشوقة تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي.
+              مرحباً بك في البطولة التفاعلية الكبرى «عباقرة عيون مصر»! منصة مسابقات وتصفيات إلكترونية ذاتية الإدارة لجميع الطلاب والمدارس والإدارات التعليمية والمحافظات، تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي.
             </p>
 
             {/* Dual Competition Mode Highlight: Individual + Team System */}
@@ -552,11 +559,26 @@ export default function App() {
               mode={currentView === 'qualifiers' ? 'qualifier' : 'practice'}
               settings={settings}
               students={students}
-              onRegisterStudent={(newStu) => setStudents((prev) => [newStu, ...prev])}
+              onRegisterStudent={(newStu) => {
+                setStudents((prev) => {
+                  const { rankedStudents } = runAutomatedRankingAndQualification(
+                    [newStu, ...prev],
+                    settings
+                  );
+                  return rankedStudents;
+                });
+              }}
               onCompleteQualifier={(stuId, updated) => {
-                setStudents((prev) =>
-                  prev.map((s) => (s.id === stuId ? updated : s))
-                );
+                setStudents((prev) => {
+                  const replaced = prev.map((s) => (s.id === stuId ? updated : s));
+                  const { rankedStudents } = runAutomatedRankingAndQualification(
+                    replaced,
+                    settings
+                  );
+                  const newlyRanked = rankedStudents.find((r) => r.id === stuId);
+                  if (newlyRanked) setActiveStudent(newlyRanked);
+                  return rankedStudents;
+                });
                 setUnlockedJourneyIdx((prev) => Math.max(prev, 5));
               }}
               onNavigateView={(v) => setCurrentView(v)}
@@ -646,7 +668,7 @@ export default function App() {
 
       {/* ==================== ROW 4: LUXURY FOOTER (Variation 2) ==================== */}
       <footer className="border-t border-[rgba(242,239,235,0.1)] px-6 sm:px-12 py-6 flex flex-col sm:flex-row justify-between items-center gap-2 no-print">
-        <div className="label">© 2026 OYOUN MISR SCHOOL - GENIUS COMPETITION</div>
+        <div className="label">© 2026 OYOUN MISR GENIUSES COMPETITION — عباقرة عيون مصر</div>
         <div className="label">DEVELOPED FOR EXCELLENCE</div>
       </footer>
 

@@ -38,6 +38,7 @@ import {
   AppView,
   ChallengeGameId,
   CompetitionAward,
+  GradeNumber,
 } from '../types/competition';
 import { JOURNEY_NODES } from '../data/challengesData';
 import { soundEngine } from '../utils/sound';
@@ -193,7 +194,7 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
           <div>
             <div className="text-xs font-bold text-amber-400">
-              🏆 مدرسة عيون مصر · بطاقة عبقري معتمدة
+              🏆 {student.schoolName || 'مدرسة عيون مصر للغات'} · بطاقة عبقري معتمدة
             </div>
             <h3 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
               {student.name}
@@ -203,6 +204,13 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
               <span className="font-mono-num text-amber-300 font-bold">
                 {student.participationCode}
               </span>
+            </div>
+            <div className="text-xs text-emerald-300 font-semibold mt-1.5 flex flex-wrap items-center gap-2">
+              <span>🏫 المدرسة: {student.schoolName || 'مدرسة عيون مصر للغات'}</span>
+              <span>·</span>
+              <span>📍 المنطقة: {student.region || 'القاهرة'}</span>
+              <span>·</span>
+              <span>🌍 البلد: {student.country || 'مصر 🇪🇬'}</span>
             </div>
           </div>
 
@@ -561,8 +569,17 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
   const [builderSize, setBuilderSize] = React.useState<4 | 5>(4);
   const [builderName, setBuilderName] = React.useState('');
   const [builderEmblem, setBuilderEmblem] = React.useState('🦅');
+  const [builderSchool, setBuilderSchool] = React.useState(
+    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+  );
+  const [builderRegion, setBuilderRegion] = React.useState(
+    settings.defaultRegion || 'القاهرة'
+  );
+  const [builderCountry, setBuilderCountry] = React.useState(
+    settings.defaultCountry || 'مصر 🇪🇬'
+  );
   const [builderPlayers, setBuilderPlayers] = React.useState<
-    { name: string; grade: '4' | '5' | '6'; isReserve?: boolean }[]
+    { name: string; grade: GradeNumber; isReserve?: boolean }[]
   >([
     { name: '', grade: '6' },
     { name: '', grade: '5' },
@@ -694,6 +711,40 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
               </div>
             </div>
 
+            {/* School Name, Region & Country for Team */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">🏫 اسم المدرسة</label>
+                <input
+                  type="text"
+                  value={builderSchool}
+                  onChange={(e) => setBuilderSchool(e.target.value)}
+                  placeholder="مثال: مدرسة عيون مصر للغات"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">📍 المنطقة / المحافظة</label>
+                <input
+                  type="text"
+                  value={builderRegion}
+                  onChange={(e) => setBuilderRegion(e.target.value)}
+                  placeholder="مثال: القاهرة / الجيزة"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">🌍 البلد</label>
+                <input
+                  type="text"
+                  value={builderCountry}
+                  onChange={(e) => setBuilderCountry(e.target.value)}
+                  placeholder="مثال: مصر 🇪🇬"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {builderPlayers.slice(0, builderSize).map((pl, idx) => (
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
@@ -746,7 +797,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                         const next = [...builderPlayers];
                         next[idx] = {
                           ...next[idx],
-                          grade: e.target.value as '4' | '5' | '6',
+                          grade: e.target.value as GradeNumber,
                         };
                         setBuilderPlayers(next);
                       }}
@@ -777,6 +828,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   onCreateTeam({
                     id: `team-${now}`,
                     name: builderName.trim(),
+                    schoolName: builderSchool.trim() || 'مدرسة عيون مصر للغات',
+                    region: builderRegion.trim() || 'القاهرة',
+                    country: builderCountry.trim() || 'مصر 🇪🇬',
                     emblem: builderEmblem || '🏆',
                     color: '#F59E0B',
                     captainId: membersList[0].id,
@@ -816,6 +870,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                     <div>
                       <h3 className="text-xl font-bold text-white font-display">{team.name}</h3>
                       <span className="text-xs text-amber-400">{team.titleBadge}</span>
+                      <div className="text-[11px] text-emerald-300 mt-1">
+                        🏫 {team.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {team.region || settings.defaultRegion || 'القاهرة'} · 🌍 {team.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                      </div>
                     </div>
                   </div>
                   <div className="text-left">
@@ -1126,6 +1183,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                     <span className="text-slate-400">{t.wins} انتصارات · ({t.members.length} لاعبين)</span>
                   </div>
                   <h3 className="text-xl font-bold text-white font-display">{t.name}</h3>
+                  <div className="text-[11px] text-emerald-300 mt-0.5">
+                    🏫 {t.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                  </div>
                   <div className="flex items-baseline justify-between mt-2">
                     <div className="text-2xl font-bold font-mono-num text-emerald-400">
                       {t.points} نقطة
@@ -1193,6 +1253,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         الصف {stu.grade} الابتدائي · فصل {stu.className}
+                      </div>
+                      <div className="text-[11px] text-emerald-300 mt-1">
+                        🏫 {stu.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {stu.region || settings.defaultRegion || 'القاهرة'} · 🌍 {stu.country || settings.defaultCountry || 'مصر 🇪🇬'}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">

@@ -14,7 +14,27 @@ import {
   Crown,
   Camera,
   Upload,
+  AlertTriangle,
+  ClipboardList,
+  Pause,
+  Lock,
+  Trophy,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 import {
   StudentProfile,
   Team,
@@ -25,9 +45,25 @@ import {
   QualifierDomain,
   DifficultyLevel,
   CompetitionAward,
+  SpecialCaseAlert,
+  AuditLogEntry,
+  SeasonLifecycleStatus,
+  EducationalStage,
+  HierarchyLevel,
 } from '../types/competition';
 import { DOMAIN_META } from '../data/qualifierQuestions';
 import { APP_PROFILE_PRESETS } from '../data/challengesData';
+import {
+  STAGE_METADATA,
+  GRADE_LABELS,
+  SEASON_STATUS_META,
+  INITIAL_SPECIAL_CASES,
+  INITIAL_AUDIT_LOGS,
+  resolveStageFromGrade,
+  buildStudentGroupingPath,
+  runAutomatedRankingAndQualification,
+  computeAggregatedRankings,
+} from '../services/qualificationEngine';
 import { soundEngine } from '../utils/sound';
 
 interface AdminDashboardProps {
@@ -47,7 +83,17 @@ interface AdminDashboardProps {
   onTriggerGeniusAlarm: () => void;
 }
 
-export type AdminSection = 'students' | 'questions' | 'competition' | 'teams' | 'awards' | 'matches' | 'results';
+export type AdminSection =
+  | 'overview'
+  | 'special_cases'
+  | 'audit_log'
+  | 'students'
+  | 'questions'
+  | 'competition'
+  | 'teams'
+  | 'awards'
+  | 'matches'
+  | 'results';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   students,
@@ -62,12 +108,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   setMatches,
   awards,
   setAwards,
-  initialSection = 'students',
+  initialSection = 'overview',
   onTriggerGeniusAlarm,
 }) => {
   const [section, setSection] = useState<AdminSection>(initialSection);
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // ⚠️ Special Cases & 📋 Audit Log State
+  const [specialCases, setSpecialCases] = useState<SpecialCaseAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem('om_geniuses_special_cases_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_SPECIAL_CASES;
+  });
+
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('om_geniuses_audit_logs_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_AUDIT_LOGS;
+  });
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('om_geniuses_special_cases_v1', JSON.stringify(specialCases));
+    } catch {}
+  }, [specialCases]);
+
+  React.useEffect(() => {
+    try {
+      localStorage.setItem('om_geniuses_audit_logs_v1', JSON.stringify(auditLogs));
+    } catch {}
+  }, [auditLogs]);
+
+  const appendAuditLog = (
+    category: AuditLogEntry['category'],
+    actor: AuditLogEntry['actor'],
+    title: string,
+    details: string
+  ) => {
+    const newEntry: AuditLogEntry = {
+      id: `log-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+      category,
+      actor,
+      title,
+      details,
+      timestamp: new Date().toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      }),
+    };
+    setAuditLogs((prev) => [newEntry, ...prev]);
+  };
 
   React.useEffect(() => {
     if (initialSection) setSection(initialSection);
@@ -77,6 +173,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [stuName, setStuName] = useState('');
   const [stuGrade, setStuGrade] = useState<GradeNumber>('5');
   const [stuClass, setStuClass] = useState('5 / أ');
+  const [stuSchool, setStuSchool] = useState(
+    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+  );
+  const [stuRegion, setStuRegion] = useState(settings.defaultRegion || 'القاهرة');
+  const [stuCountry, setStuCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
 
   // Add Question State
   const [qText, setQText] = useState('');
@@ -94,6 +195,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [teamName, setTeamName] = useState('');
   const [teamEmblem, setTeamEmblem] = useState('🦁');
   const [teamColor, setTeamColor] = useState('#F59E0B');
+  const [teamSchool, setTeamSchool] = useState(
+    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+  );
+  const [teamRegion, setTeamRegion] = useState(settings.defaultRegion || 'القاهرة');
+  const [teamCountry, setTeamCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
   const [teamPlayerCount, setTeamPlayerCount] = useState<4 | 5>(4);
   const [newTeamMembers, setNewTeamMembers] = useState<
     { name: string; grade: GradeNumber; isReserve?: boolean }[]
@@ -116,11 +222,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Export Results CSV
   const handleExportCSV = () => {
-    const header = 'الاسم,الصف,الفصل,كود المشاركة,النقاط الكلية,السرعة,تأهل للنهائيات\n';
+    const header = 'الاسم,الصف,الفصل,اسم المدرسة,المنطقة,البلد,كود المشاركة,النقاط الكلية,السرعة,تأهل للنهائيات\n';
     const rows = students
       .map(
         (s) =>
-          `"${s.name}",${s.grade},"${s.className}",${s.participationCode},${s.scores.total},${s.scores.speedScore},${
+          `"${s.name}",${s.grade},"${s.className}","${s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}","${s.region || settings.defaultRegion || 'القاهرة'}","${s.country || settings.defaultCountry || 'مصر'}",${s.participationCode},${s.scores.total},${s.scores.speedScore},${
             s.qualifiedForFinals ? 'نعم' : 'لا'
           }`
       )
@@ -141,33 +247,285 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       s.className.includes(searchQuery)
   );
 
+  // ==================== 📊 SELF-MANAGED SEASON ANALYTICS & RECHARTS DATA ====================
+  const currentSeasonStatus: SeasonLifecycleStatus =
+    settings.seasonStatus || 'qualifiers_running';
+  const statusMeta = SEASON_STATUS_META[currentSeasonStatus];
+
+  const uniqueSchoolsCount = new Set(
+    students.map((s) => s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات')
+  ).size;
+  const uniqueGovernoratesCount = new Set(
+    students.map((s) => s.governorate || s.region || settings.defaultRegion || 'القاهرة')
+  ).size;
+  const completedQualifiersCount = students.filter((s) => s.completedQualifier).length;
+  const qualifiedStudentsCount = students.filter((s) => s.qualifiedForFinals).length;
+  const pendingSpecialCasesCount = specialCases.filter((c) => c.status === 'pending').length;
+
+  // 1. Recharts Data: Distribution of Participating Students by Governorate (توزيع الطلاب حسب المحافظات)
+  const governorateChartData = React.useMemo(() => {
+    const govMap = new Map<
+      string,
+      { governorate: string; total: number; qualified: number; completed: number }
+    >();
+    students.forEach((s) => {
+      const gov = s.governorate || s.region || 'القاهرة';
+      const entry = govMap.get(gov) || {
+        governorate: gov,
+        total: 0,
+        qualified: 0,
+        completed: 0,
+      };
+      entry.total += 1;
+      if (s.completedQualifier) entry.completed += 1;
+      if (s.qualifiedForFinals) entry.qualified += 1;
+      govMap.set(gov, entry);
+    });
+    return Array.from(govMap.values()).sort((a, b) => b.total - a.total);
+  }, [students]);
+
+  // 2. Recharts Data: Distribution of Participating Students by Grade & Stage (توزيع الطلاب حسب الصفوف والمراحل)
+  const gradeChartData = React.useMemo(() => {
+    const gradeOrder: GradeNumber[] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+    const gradeShortNames: Record<GradeNumber, string> = {
+      '1': '١ ب',
+      '2': '٢ ب',
+      '3': '٣ ب',
+      '4': '٤ ب',
+      '5': '٥ ب',
+      '6': '٦ ب',
+      '7': '١ ع',
+      '8': '٢ ع',
+      '9': '٣ ع',
+      '10': '١ ث',
+      '11': '٢ ث',
+      '12': '٣ ث',
+    };
+
+    return gradeOrder
+      .map((g) => {
+        const inGrade = students.filter((s) => s.grade === g);
+        const qualifiedInGrade = inGrade.filter((s) => s.qualifiedForFinals).length;
+        const avgPoints =
+          inGrade.length > 0
+            ? Math.round(inGrade.reduce((acc, s) => acc + s.scores.total, 0) / inGrade.length)
+            : 0;
+        return {
+          gradeKey: g,
+          gradeName: gradeShortNames[g],
+          fullGradeLabel: GRADE_LABELS[g],
+          participants: inGrade.length,
+          qualified: qualifiedInGrade,
+          avgPoints,
+        };
+      })
+      .filter((row) => row.participants > 0 || ['3', '4', '5', '6', '8', '11'].includes(row.gradeKey));
+  }, [students]);
+
+  const PIE_COLORS = ['#F59E0B', '#38BDF8', '#10B981', '#A855F7', '#EC4899', '#F97316'];
+
+  const aggregatedRankings = React.useMemo(
+    () => computeAggregatedRankings(students),
+    [students]
+  );
+
+  // ==================== 🚀 1-CLICK SELF-MANAGED SEASON ACTIONS ====================
+  const handleOpenQualifiers = () => {
+    soundEngine.playFanfare();
+    setSettings((prev) => ({
+      ...prev,
+      seasonStatus: 'qualifiers_running',
+      resultsCertified: false,
+      activeRoundStatus: 'qualifiers_open',
+    }));
+    appendAuditLog(
+      'season_state_change',
+      '👩‍💼 المشرفة العامة',
+      '🚀 فتح وتفعيل التصفيات الإلكترونية الذاتية',
+      'بدأ النظام في استقبال الطلاب وتوزيع الأسئلة العشوائية المتوازنة وتصحيحها آلياً.'
+    );
+    notify('🚀 تم فتح التصفيات الإلكترونية! النظام الذاتي يدير الاختبارات والتصحيح الآن تلقائياً.');
+  };
+
+  const handlePauseQualifiers = () => {
+    soundEngine.playSelectTile();
+    setSettings((prev) => ({
+      ...prev,
+      seasonStatus: 'registration_open',
+    }));
+    appendAuditLog(
+      'season_state_change',
+      '👩‍💼 المشرفة العامة',
+      '⏸️ إيقاف مؤقت للتصفيات الإلكترونية',
+      'تم إيقاف استقبال محاولات الاختبار مؤقتاً مع الاحتفاظ بكافة إجابات ونتائج الطلاب.'
+    );
+    notify('⏸️ تم إيقاف التصفيات مؤقتاً.');
+  };
+
+  const handleCloseAndAutoPrepareResults = () => {
+    soundEngine.playBuzzer();
+    const { rankedStudents, detectedTieAlerts } = runAutomatedRankingAndQualification(
+      students,
+      { ...settings, resultsCertified: false }
+    );
+    setStudents(rankedStudents);
+    if (detectedTieAlerts.length > 0) {
+      setSpecialCases((prev) => {
+        const existingIds = new Set(prev.map((c) => c.id));
+        const newAlerts = detectedTieAlerts.filter((a) => !existingIds.has(a.id));
+        return [...newAlerts, ...prev];
+      });
+    }
+    setSettings((prev) => ({
+      ...prev,
+      seasonStatus: 'results_ready',
+      resultsCertified: false,
+    }));
+    appendAuditLog(
+      'auto_qualify',
+      '🤖 النظام الذاتي',
+      '🔒 إغلاق التصفيات وتجهيز الترتيب والمتأهلين تلقائياً',
+      `تمت مراجعة وترتيب ${rankedStudents.length} طالباً آلياً وتحديد المتأهلين حسب حصص كل مرحلة. «تم تجهيز النتائج تلقائياً.»`
+    );
+    notify('🔒 تم إغلاق التصفيات: «تم تجهيز النتائج تلقائياً.» جاهزة لمراجعتك واعتمادك!');
+  };
+
+  const handleCertifyAndPublishResults = () => {
+    soundEngine.playFanfare();
+    const { rankedStudents } = runAutomatedRankingAndQualification(students, {
+      ...settings,
+      resultsCertified: true,
+    });
+    setStudents(rankedStudents);
+    setSettings((prev) => ({
+      ...prev,
+      seasonStatus: 'next_round_ready',
+      resultsCertified: true,
+      showResultsDuringQualifiers: true,
+    }));
+    appendAuditLog(
+      'results_approved',
+      '👩‍💼 المشرفة العامة',
+      '🏆 الاعتماد النهائي للنتائج وترقية المتأهلين للجولة التالية تلقائياً',
+      'تم نشر قوائم أفضل الطلاب وأفضل المدارس والإدارات والمحافظات، وتفعيل بطاقة «🟢 لقد تأهلت!» للمتأهلين.'
+    );
+    notify('🏆 تم اعتماد النتائج رسمياً! انتقل المتأهلون تلقائياً إلى المرحلة التالية.');
+  };
+
   return (
     <div className="space-y-6">
-      <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div>
-          <span className="text-xs font-semibold text-amber-400">
-            🛠️ لوحة تحكم المشرف وإدارة البطولة — مدرسة عيون مصر
-          </span>
-          <h2 className="text-2xl font-bold text-white font-display mt-1">
-            الإدارة الكاملة للطلاب، الأسئلة، الفرق، المباريات، والإعدادات
-          </h2>
+      {/* ==================== 👩‍💼 GENERAL SUPERVISOR SEASON STATUS & 1-CLICK CONTROL BAR ==================== */}
+      <div className="p-6 rounded-3xl bg-gradient-to-l from-[#18294D] via-[#131F38] to-[#0D1527] border-2 border-amber-400/60 space-y-5 shadow-2xl">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 text-xs font-extrabold">
+                👩‍💼 المشرفة العامة على المسابقة
+              </span>
+              <span className={`px-3 py-1 rounded-full border text-xs font-bold ${statusMeta.colorClass}`}>
+                {statusMeta.badge}
+              </span>
+              <span className="text-xs text-slate-400 font-semibold">
+                {settings.seasonName || 'موسم عباقرة عيون مصر ٢٠٢٦'}
+              </span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-white font-display mt-1">
+              {statusMeta.title}
+            </h2>
+            <p className="text-xs text-slate-300">
+              {statusMeta.description}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={onTriggerGeniusAlarm}
+              className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 cursor-pointer"
+            >
+              🚨 إنذار العباقرة
+            </button>
+            <button
+              onClick={handleExportCSV}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 border border-amber-400/50 text-amber-300 text-xs font-bold hover:bg-amber-400 hover:text-slate-950 flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              <span>تصدير النتائج (CSV)</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={onTriggerGeniusAlarm}
-            className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-500"
-          >
-            🚨 إطلاق إنذار العباقرة الآن
-          </button>
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 flex items-center gap-1.5"
-          >
-            <Download className="w-4 h-4" />
-            <span>تصدير النتائج (CSV)</span>
-          </button>
+        {/* 4 One-Click Season Lifecycle Buttons (#47) */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleOpenQualifiers}
+              className={`px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                currentSeasonStatus === 'qualifiers_running'
+                  ? 'bg-emerald-400 text-slate-950 shadow-lg ring-2 ring-emerald-300'
+                  : 'bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 hover:bg-emerald-400 hover:text-slate-950'
+              }`}
+            >
+              <Play className="w-4 h-4" />
+              <span>🚀 فتح التصفيات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePauseQualifiers}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer ${
+                currentSeasonStatus === 'registration_open'
+                  ? 'bg-sky-400 text-slate-950 border-sky-300'
+                  : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-sky-400'
+              }`}
+            >
+              <Pause className="w-4 h-4" />
+              <span>⏸️ إيقاف التصفيات</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCloseAndAutoPrepareResults}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer ${
+                currentSeasonStatus === 'results_ready'
+                  ? 'bg-purple-400 text-slate-950 border-purple-300 shadow-lg'
+                  : 'bg-slate-900 text-purple-300 border-purple-500/40 hover:bg-purple-500/20'
+              }`}
+            >
+              <Lock className="w-4 h-4" />
+              <span>🔒 إغلاق التصفيات (تجهيز تلقائي)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCertifyAndPublishResults}
+              className={`px-5 py-2.5 rounded-xl font-extrabold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                currentSeasonStatus === 'next_round_ready'
+                  ? 'bg-amber-400 text-slate-950 shadow-lg ring-2 ring-amber-200'
+                  : 'bg-amber-400/20 border border-amber-400 text-amber-300 hover:bg-amber-400 hover:text-slate-950'
+              }`}
+            >
+              <Trophy className="w-4 h-4" />
+              <span>🏆 اعتماد النتائج وترقية المتأهلين</span>
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-300 bg-slate-950/80 px-3.5 py-2 rounded-xl border border-slate-800">
+            🤖 <strong className="text-amber-400">التشغيل الذاتي:</strong> التسجيل ← التوزيع ← الاختبار ← التصحيح ← الترتيب ← التأهل يتم تلقائياً 100%
+          </div>
         </div>
+
+        {currentSeasonStatus === 'results_ready' && (
+          <div className="p-3.5 rounded-xl bg-purple-500/20 border border-purple-400 text-purple-200 text-xs font-bold flex items-center justify-between">
+            <span>✨ «تم تجهيز النتائج تلقائيًا.» قام النظام بفرز وترتيب جميع الطلاب وتحديد المتأهلين وفق حصص كل مرحلة.</span>
+            <button
+              onClick={handleCertifyAndPublishResults}
+              className="px-4 py-1.5 rounded-lg bg-amber-400 text-slate-950 font-extrabold text-xs cursor-pointer"
+            >
+              اعتماد نهائي الآن ✓
+            </button>
+          </div>
+        )}
       </div>
 
       {toastMsg && (
@@ -181,21 +539,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {(
           [
+            { id: 'overview', label: '👩‍💼 لوحة المشرفة والإحصائيات (Recharts)' },
+            { id: 'special_cases', label: `⚠️ مراجعة الحالات (${pendingSpecialCasesCount})` },
+            { id: 'audit_log', label: `📋 سجل المسابقة (${auditLogs.length})` },
+            { id: 'competition', label: '⚙️ دورة وإعدادات الموسم الذاتي' },
             { id: 'students', label: '👨‍🎓 الطلاب والمتأهلون' },
-            { id: 'questions', label: '❓ بنك الأسئلة' },
-            { id: 'teams', label: '🧩 إدارة الفرق والقادة' },
-            { id: 'awards', label: '🏅 ربط الجوائز والألقاب بالفائزين' },
-            { id: 'competition', label: '⚙️ إعدادات المسابقة والحماية' },
-            { id: 'matches', label: '⚔️ إدارة المباريات المباشرة' },
-            { id: 'results', label: '📊 التقارير والنتائج' },
+            { id: 'questions', label: '❓ بنك الأسئلة الذكي' },
+            { id: 'teams', label: '🧩 إدارة الفرق (4-5)' },
+            { id: 'awards', label: '🏅 ربط الجوائز بالفائزين' },
+            { id: 'matches', label: '⚔️ المباريات المباشرة' },
+            { id: 'results', label: '📊 النتائج العامة والمدارس' },
           ] as { id: AdminSection; label: string }[]
         ).map((tab) => (
           <button
             key={tab.id}
             onClick={() => setSection(tab.id)}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all cursor-pointer ${
               section === tab.id
-                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
                 : 'bg-[#131F38] text-slate-300 border-slate-800 hover:text-white'
             }`}
           >
@@ -203,6 +564,534 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </button>
         ))}
       </div>
+
+      {/* ==================== 0. SUPERVISOR OVERVIEW & RECHARTS VISUAL COMPONENT ==================== */}
+      {section === 'overview' && (
+        <div className="space-y-6">
+          {/* 6 Automatic Executive KPI Cards (#46) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="p-4 rounded-2xl bg-[#131F38] border border-slate-800 space-y-1">
+              <div className="text-xs text-slate-400">👥 المشاركون</div>
+              <div className="text-2xl font-extrabold font-mono-num text-white">
+                {students.length}
+              </div>
+              <div className="text-[11px] text-emerald-400">مسجلون تلقائياً</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#131F38] border border-slate-800 space-y-1">
+              <div className="text-xs text-slate-400">🏫 المدارس</div>
+              <div className="text-2xl font-extrabold font-mono-num text-amber-400">
+                {uniqueSchoolsCount}
+              </div>
+              <div className="text-[11px] text-slate-300">مدرسة مشاركة</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#131F38] border border-slate-800 space-y-1">
+              <div className="text-xs text-slate-400">🗺️ المحافظات</div>
+              <div className="text-2xl font-extrabold font-mono-num text-sky-400">
+                {uniqueGovernoratesCount}
+              </div>
+              <div className="text-[11px] text-slate-300">محافظة مشاركة</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#131F38] border border-slate-800 space-y-1">
+              <div className="text-xs text-slate-400">📊 التصفيات</div>
+              <div className="text-2xl font-extrabold font-mono-num text-purple-400">
+                {completedQualifiersCount}
+              </div>
+              <div className="text-[11px] text-slate-300">أنهوا الاختبار آلياً</div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#131F38] border border-emerald-500/40 space-y-1">
+              <div className="text-xs text-emerald-300">🏆 المتأهلون</div>
+              <div className="text-2xl font-extrabold font-mono-num text-emerald-400">
+                {qualifiedStudentsCount}
+              </div>
+              <div className="text-[11px] text-emerald-300">تأهلوا تلقائياً</div>
+            </div>
+
+            <div
+              onClick={() => setSection('special_cases')}
+              className="p-4 rounded-2xl bg-[#131F38] border border-rose-500/50 hover:border-rose-400 cursor-pointer space-y-1 transition-all"
+            >
+              <div className="text-xs text-rose-300">⚠️ الحالات الخاصة</div>
+              <div className="text-2xl font-extrabold font-mono-num text-rose-400">
+                {pendingSpecialCasesCount}
+              </div>
+              <div className="text-[11px] text-rose-300 underline">اضغط للمراجعة ←</div>
+            </div>
+          </div>
+
+          {/* ==================== 📈 RECHARTS VISUAL COMPONENT: GOVERNORATES & GRADES DISTRIBUTION ==================== */}
+          <div className="p-6 rounded-3xl bg-[#131F38] border border-amber-400/40 space-y-6 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4" />
+                  <span>الإحصائيات المرئية الحية (Recharts Analytics)</span>
+                </span>
+                <h3 className="text-xl font-bold text-white font-display mt-0.5">
+                  📊 توزيع الطلاب المشاركين والمتأهلين حسب المحافظات والصفوف الدراسية
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  // Add a sample batch of multi-governorate & multi-grade students to see live auto-scaling
+                  soundEngine.playSelectTile();
+                  const demoGovs = ['القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'أسيوط'];
+                  const demoGrades: GradeNumber[] = ['2', '3', '4', '5', '6', '8', '9', '11'];
+                  const pickedGov = demoGovs[Math.floor(Math.random() * demoGovs.length)];
+                  const pickedGrade = demoGrades[Math.floor(Math.random() * demoGrades.length)];
+                  const stage = resolveStageFromGrade(pickedGrade);
+                  const newStu: StudentProfile = {
+                    id: `stu-auto-${Date.now()}`,
+                    name: `طالب متسابق (${pickedGov})`,
+                    grade: pickedGrade,
+                    stage,
+                    className: `${pickedGrade} / أ`,
+                    schoolName: `مدرسة عيون مصر (${pickedGov})`,
+                    administration: `إدارة ${pickedGov} التعليمية`,
+                    governorate: pickedGov,
+                    region: pickedGov,
+                    country: 'مصر 🇪🇬',
+                    participationCode: `OM-${pickedGrade}${Math.floor(100 + Math.random() * 899)}`,
+                    attemptsUsed: 1,
+                    completedQualifier: true,
+                    qualifierDurationSeconds: 1050,
+                    scores: {
+                      total: Math.floor(380 + Math.random() * 100),
+                      speedScore: 92,
+                      logic: 90,
+                      science: 91,
+                      arabic: 89,
+                      observation: 93,
+                      math: 92,
+                      egypt_world: 90,
+                      general_culture: 88,
+                      technology: 94,
+                    },
+                    qualifiedForFinals: true,
+                    badges: ['🌟 متأهل تلقائياً'],
+                  };
+                  const { rankedStudents } = runAutomatedRankingAndQualification(
+                    [newStu, ...students],
+                    settings
+                  );
+                  setStudents(rankedStudents);
+                  appendAuditLog(
+                    'student_register',
+                    '🤖 النظام الذاتي',
+                    `تسجيل وتصحيح آلي لطالب جديد من محافظة ${pickedGov}`,
+                    `تم تسكين الطالب في (${STAGE_METADATA[stage].shortLabel} - صف ${pickedGrade}) وتحديث رسوم Recharts تلقائياً.`
+                  );
+                  notify(`تمت محاكاة تسجيل وتصحيح طالب جديد من محافظة ${pickedGov} (صف ${pickedGrade})!`);
+                }}
+                className="px-4 py-2 rounded-xl bg-amber-400/20 border border-amber-400 text-amber-300 hover:bg-amber-400 hover:text-slate-950 text-xs font-bold transition-colors cursor-pointer"
+              >
+                + محاكاة دخول طالب جديد وتحديث الرسم البياني تلقائياً
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Chart 1: BarChart of Students & Qualified by Governorate (توزيع الطلاب حسب المحافظات) */}
+              <div className="lg:col-span-6 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-display">
+                      ١. توزيع الطلاب المشاركين والمتأهلين حسب المحافظات 🗺️
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      مقارنة إجمالي المسجلين بعدد المتأهلين تلقائياً في كل محافظة
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-72 w-full" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={governorateChartData}
+                      margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                      <XAxis
+                        dataKey="governorate"
+                        stroke="#94A3B8"
+                        tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        stroke="#94A3B8"
+                        tick={{ fill: '#94A3B8', fontSize: 11 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0F172A',
+                          borderColor: '#D4AF37',
+                          borderRadius: '12px',
+                          color: '#F8FAFC',
+                          fontSize: '12px',
+                          textAlign: 'right',
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                      <Bar
+                        dataKey="total"
+                        name="إجمالي المشاركين بالمحافظة"
+                        fill="#38BDF8"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="qualified"
+                        name="المتأهلون تلقائياً"
+                        fill="#10B981"
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Chart 2: BarChart of Students Distribution by Grade (توزيع الطلاب حسب الصفوف الدراسية) */}
+              <div className="lg:col-span-6 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-white font-display">
+                      ٢. توزيع الطلاب المشاركين حسب الصفوف الدراسية 🎓
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      يوضح أعداد الطلاب والمتأهلين عبر الصفوف (ابتدائي صغير، كبير، إعدادي، ثانوي)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-72 w-full" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={gradeChartData}
+                      margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                      <XAxis
+                        dataKey="gradeName"
+                        stroke="#94A3B8"
+                        tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                      />
+                      <YAxis
+                        allowDecimals={false}
+                        stroke="#94A3B8"
+                        tick={{ fill: '#94A3B8', fontSize: 11 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0F172A',
+                          borderColor: '#D4AF37',
+                          borderRadius: '12px',
+                          color: '#F8FAFC',
+                          fontSize: '12px',
+                          textAlign: 'right',
+                        }}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                      <Bar
+                        dataKey="participants"
+                        name="عدد الطلاب بالصف"
+                        fill="#F59E0B"
+                        radius={[6, 6, 0, 0]}
+                      />
+                      <Bar
+                        dataKey="qualified"
+                        name="المتأهلون بالصف"
+                        fill="#A855F7"
+                        radius={[6, 6, 0, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Chart 3: PieChart of Governorate Share + Stage Quotas Progress */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
+              <div className="lg:col-span-5 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <h4 className="text-sm font-bold text-white font-display flex items-center gap-2">
+                  <PieChartIcon className="w-4 h-4 text-amber-400" />
+                  <span>٣. النسبة المئوية للمشاركة حسب المحافظات</span>
+                </h4>
+                <div className="h-60 w-full" dir="ltr">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={governorateChartData}
+                        dataKey="total"
+                        nameKey="governorate"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={78}
+                        label={({ name, percent }) =>
+                          `${name} (${Math.round((percent || 0) * 100)}%)`
+                        }
+                      >
+                        {governorateChartData.map((_, idx) => (
+                          <Cell
+                            key={`cell-${idx}`}
+                            fill={PIE_COLORS[idx % PIE_COLORS.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#0F172A',
+                          borderColor: '#D4AF37',
+                          borderRadius: '12px',
+                          color: '#F8FAFC',
+                          fontSize: '12px',
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Automatic Stage Quotas Summary (#40 & #44) */}
+              <div className="lg:col-span-7 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-white font-display">
+                    ٤. التوزيع التلقائي للمراحل وحصص التأهل (بنوك أسئلة منفصلة لكل مرحلة)
+                  </h4>
+                  <span className="text-[11px] text-emerald-400 font-bold">
+                    ابتدائي صغير ≠ ابتدائي كبير ≠ إعدادي ≠ ثانوي
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {(Object.keys(STAGE_METADATA) as EducationalStage[]).map((stgKey) => {
+                    const meta = STAGE_METADATA[stgKey];
+                    const stat = aggregatedRankings.stageBreakdown[stgKey];
+                    const quota =
+                      settings.stageQuotas?.[stgKey] || meta.defaultQuota;
+                    return (
+                      <div
+                        key={stgKey}
+                        className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span
+                            className="text-xs font-extrabold"
+                            style={{ color: meta.badgeColor }}
+                          >
+                            {meta.label}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-950 text-amber-300 font-mono-num">
+                            حصة التأهل: أفضل {quota}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-300">
+                          <span>المشاركون: <strong className="text-white font-mono-num">{stat.total}</strong></span>
+                          <span>تأهل تلقائياً: <strong className="text-emerald-400 font-mono-num">{stat.qualified}</strong></span>
+                          <span>المتوسط: <strong className="text-amber-400 font-mono-num">{stat.avgScore}</strong></span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 0.5 ⚠️ SPECIAL CASES REVIEW SECTION (#49) ==================== */}
+      {section === 'special_cases' && (
+        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <span className="text-xs font-bold text-rose-400">
+                ⚠️ نظام مراجعة الحالات الاستثنائية فقط (لا يوقف النظام الذاتي)
+              </span>
+              <h3 className="text-xl font-bold text-white font-display mt-0.5">
+                الحالات التي تحتاج قراراً إشرافياً ({pendingSpecialCasesCount} قيد المراجعة)
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                جميع الطلاب العاديين يصححهم النظام ويرتبهم تلقائياً؛ وتظهر هنا فقط حالات الانقطاع أو التعادل أو محاولات الدخول المكررة.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {specialCases.map((sc) => (
+              <div
+                key={sc.id}
+                className={`p-4 rounded-2xl border flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
+                  sc.status === 'pending'
+                    ? 'bg-slate-950/90 border-rose-500/50'
+                    : 'bg-slate-900/50 border-slate-800 opacity-75'
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[11px] font-bold">
+                      {sc.type === 'interrupted_exam'
+                        ? '🔌 انقطاع الاختبار'
+                        : sc.type === 'duplicate_attempt'
+                        ? '🚫 محاولة دخول مكررة'
+                        : sc.type === 'tie_breaker_needed'
+                        ? '⚖️ تعادل يستدعي سؤالاً فاصلاً'
+                        : '⚠️ بلاغ تقني'}
+                    </span>
+                    <span className="text-sm font-bold text-white">{sc.studentName}</span>
+                    <span className="font-mono-num text-xs text-amber-400">({sc.participationCode})</span>
+                    <span className="text-xs text-emerald-300">
+                      🏫 {sc.schoolName} · 🗺️ {sc.governorate}
+                    </span>
+                    <span className="text-[11px] text-slate-500">{sc.createdAt}</span>
+                  </div>
+                  <p className="text-xs text-slate-300">{sc.description}</p>
+                  {sc.resolutionNote && (
+                    <div className="text-xs text-emerald-400 font-bold">
+                      ✓ قرار المشرفة: {sc.resolutionNote}
+                    </div>
+                  )}
+                </div>
+
+                {sc.status === 'pending' ? (
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {sc.type === 'interrupted_exam' && (
+                      <button
+                        onClick={() => {
+                          setSpecialCases((prev) =>
+                            prev.map((item) =>
+                              item.id === sc.id
+                                ? {
+                                    ...item,
+                                    status: 'resolved',
+                                    resolutionNote: 'تم السماح باستئناف الوقت المتبقي (9 دقائق) مع الاحتفاظ بالإجابات السابقة.',
+                                  }
+                                : item
+                            )
+                          );
+                          appendAuditLog(
+                            'supervisor_override',
+                            '👩‍💼 المشرفة العامة',
+                            `معالجة انقطاع اختبار الطالب ${sc.studentName}`,
+                            'تم تفعيل استئناف الجلسة للطالب من السؤال رقم 38.'
+                          );
+                          notify('تم السماح للطالب باستئناف الاختبار وتسجيل القرار في سجل المسابقة.');
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer"
+                      >
+                        ✓ السماح باستكمال المحاولة
+                      </button>
+                    )}
+
+                    {sc.type === 'tie_breaker_needed' && (
+                      <button
+                        onClick={() => {
+                          setSpecialCases((prev) =>
+                            prev.map((item) =>
+                              item.id === sc.id
+                                ? {
+                                    ...item,
+                                    status: 'resolved',
+                                    resolutionNote: 'تم إرسال سؤال فاصل إلكتروني تلقائي وحسم الترتيب.',
+                                  }
+                                : item
+                            )
+                          );
+                          appendAuditLog(
+                            'supervisor_override',
+                            '🤖 النظام الذاتي',
+                            `تفعيل السؤال الفاصل الإلكتروني لـ ${sc.studentName}`,
+                            'تم إرسال سؤال السرعة الفاصل وحسم التأهل تلقائياً.'
+                          );
+                          notify('تم تفعيل السؤال الفاصل الإلكتروني وحسم التعادل!');
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+                      >
+                        ⚡ إرسال سؤال فاصل إلكتروني
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setSpecialCases((prev) =>
+                          prev.map((item) =>
+                            item.id === sc.id
+                              ? {
+                                  ...item,
+                                  status: 'dismissed',
+                                  resolutionNote: 'تم اعتماد قرار النظام الآلي وإغلاق الحالة.',
+                                }
+                              : item
+                          )
+                        );
+                        appendAuditLog(
+                          'supervisor_override',
+                          '👩‍💼 المشرفة العامة',
+                          `اعتماد قرار النظام الآلي في حالة ${sc.studentName}`,
+                          'تمت مراجعة الحالة واعتماد الإجراء التلقائي للنظام.'
+                        );
+                        notify('تم اعتماد إجراء النظام الآلي وإغلاق الحالة.');
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs cursor-pointer"
+                    >
+                      اعتماد إجراء النظام الآلي
+                    </button>
+                  </div>
+                ) : (
+                  <span className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold">
+                    ✓ تمت المعالجة
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 0.8 📋 COMPETITION AUDIT LOG SECTION (#50) ==================== */}
+      {section === 'audit_log' && (
+        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+            <div>
+              <span className="text-xs font-bold text-amber-400">
+                📋 سجل عمليات المسابقة والشفافية الكاملة (Audit Log)
+              </span>
+              <h3 className="text-xl font-bold text-white font-display mt-0.5">
+                التوثيق التلقائي لجميع أحداث التسجيل، التصحيح، التأهل، وقرارات المشرفة
+              </h3>
+            </div>
+          </div>
+
+          <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
+            {auditLogs.map((log) => (
+              <div
+                key={log.id}
+                className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+              >
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`px-2.5 py-0.5 rounded text-[11px] font-bold ${
+                        log.actor === '👩‍💼 المشرفة العامة'
+                          ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
+                          : 'bg-sky-500/20 text-sky-300 border border-sky-400/40'
+                      }`}
+                    >
+                      {log.actor}
+                    </span>
+                    <span className="text-sm font-bold text-white">{log.title}</span>
+                  </div>
+                  <p className="text-xs text-slate-400">{log.details}</p>
+                </div>
+                <span className="font-mono-num text-xs text-amber-400 shrink-0">
+                  🕒 {log.timestamp}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 1. STUDENTS SECTION */}
       {section === 'students' && (
@@ -234,6 +1123,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
               />
             </div>
+
+            <div className="space-y-2.5 pt-1 border-t border-slate-800">
+              <div>
+                <label className="block text-[11px] text-amber-300 font-bold mb-1">🏫 اسم المدرسة</label>
+                <input
+                  type="text"
+                  value={stuSchool}
+                  onChange={(e) => setStuSchool(e.target.value)}
+                  placeholder="اسم المدرسة (مثال: مدرسة عيون مصر للغات)"
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] text-amber-300 font-bold mb-1">📍 المنطقة / المحافظة</label>
+                  <input
+                    type="text"
+                    value={stuRegion}
+                    onChange={(e) => setStuRegion(e.target.value)}
+                    placeholder="المنطقة (مثال: القاهرة)"
+                    className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-amber-300 font-bold mb-1">🌍 البلد</label>
+                  <input
+                    type="text"
+                    value={stuCountry}
+                    onChange={(e) => setStuCountry(e.target.value)}
+                    placeholder="البلد (مثال: مصر 🇪🇬)"
+                    className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={() => {
                 if (!stuName.trim()) return;
@@ -243,6 +1168,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   name: stuName.trim(),
                   grade: stuGrade,
                   className: stuClass,
+                  schoolName: stuSchool.trim() || 'مدرسة عيون مصر للغات',
+                  region: stuRegion.trim() || 'القاهرة',
+                  country: stuCountry.trim() || 'مصر 🇪🇬',
                   participationCode: code,
                   completedQualifier: false,
                   scores: {
@@ -290,6 +1218,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <tr>
                     <th className="py-2.5 px-3">الاسم</th>
                     <th className="py-2.5 px-3">الصف/الفصل</th>
+                    <th className="py-2.5 px-3">المدرسة / المنطقة / البلد</th>
                     <th className="py-2.5 px-3">الكود</th>
                     <th className="py-2.5 px-3">مجموع التصفيات</th>
                     <th className="py-2.5 px-3">التأهل للنهائي</th>
@@ -302,6 +1231,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <td className="py-3 px-3 font-bold text-white">{s.name}</td>
                       <td className="py-3 px-3 text-slate-300">
                         الصف {s.grade} ({s.className})
+                      </td>
+                      <td className="py-3 px-3 text-emerald-300">
+                        {s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · {s.region || settings.defaultRegion || 'القاهرة'} · {s.country || settings.defaultCountry || 'مصر 🇪🇬'}
                       </td>
                       <td className="py-3 px-3 font-mono-num text-amber-400 font-bold">
                         {s.participationCode}
@@ -602,8 +1534,209 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <h3 className="text-lg font-bold text-white font-display">
-            ⚙️ إعدادات المسابقة وإجراءات الحماية وتقليل الغش
+            ⚙️ إعدادات دورة التصفيات الإلكترونية الذاتية والحصص ومسار التأهل
           </h3>
+
+          {/* Season Name, Qualification Path Mode (#45) & Stage Quotas (#44) */}
+          <div className="p-5 rounded-2xl bg-slate-950/90 border border-emerald-400/40 space-y-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-emerald-300 font-bold mb-1">🏷️ اسم الموسم الحالي</label>
+                <input
+                  type="text"
+                  value={settings.seasonName || 'موسم عباقرة عيون مصر ٢٠٢٦'}
+                  onChange={(e) => setSettings({ ...settings, seasonName: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-emerald-300 font-bold mb-1">🛤️ نظام مسار التأهل (#45)</label>
+                <select
+                  value={settings.qualificationPathMode || 'hierarchical'}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      qualificationPathMode: e.target.value as 'national_direct' | 'hierarchical',
+                    })
+                  }
+                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                >
+                  <option value="hierarchical">
+                    🏫 تدرج هرمي: مدرسة ← إدارة تعليمية ← محافظة ← جمهورية
+                  </option>
+                  <option value="national_direct">
+                    🇪🇬 تصفيات جمهورية مباشرة
+                  </option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-emerald-300 font-bold mb-1">🎯 المستوى الحالي للتصفية</label>
+                <select
+                  value={settings.currentHierarchyLevel || 'school'}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      currentHierarchyLevel: e.target.value as HierarchyLevel,
+                    })
+                  }
+                  className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                >
+                  <option value="school">🏫 تصفية المدرسة</option>
+                  <option value="administration">📍 تصفية الإدارة التعليمية</option>
+                  <option value="governorate">🗺️ تصفية المحافظة</option>
+                  <option value="republic">🇪🇬 التصفية النهائية على مستوى الجمهورية</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Stage Quotas (#44) */}
+            <div className="pt-2 border-t border-slate-800">
+              <div className="font-bold text-amber-300 mb-2">
+                🏆 حصص التأهل التلقائي حسب المرحلة التعليمية (يحدد النظام المتأهلين تلقائياً حسب هذه الأعداد):
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">ابتدائي صغير (صفوف ١-٣)</label>
+                  <input
+                    type="number"
+                    value={settings.stageQuotas?.primary_lower ?? 100}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        stageQuotas: {
+                          ...(settings.stageQuotas || {
+                            primary_lower: 100,
+                            primary_upper: 150,
+                            preparatory: 100,
+                            secondary: 80,
+                          }),
+                          primary_lower: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono-num"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">ابتدائي كبير (صفوف ٤-٦)</label>
+                  <input
+                    type="number"
+                    value={settings.stageQuotas?.primary_upper ?? 150}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        stageQuotas: {
+                          ...(settings.stageQuotas || {
+                            primary_lower: 100,
+                            primary_upper: 150,
+                            preparatory: 100,
+                            secondary: 80,
+                          }),
+                          primary_upper: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono-num"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">المرحلة الإعدادية</label>
+                  <input
+                    type="number"
+                    value={settings.stageQuotas?.preparatory ?? 100}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        stageQuotas: {
+                          ...(settings.stageQuotas || {
+                            primary_lower: 100,
+                            primary_upper: 150,
+                            preparatory: 100,
+                            secondary: 80,
+                          }),
+                          preparatory: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono-num"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">المرحلة الثانوية</label>
+                  <input
+                    type="number"
+                    value={settings.stageQuotas?.secondary ?? 80}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        stageQuotas: {
+                          ...(settings.stageQuotas || {
+                            primary_lower: 100,
+                            primary_upper: 150,
+                            preparatory: 100,
+                            secondary: 80,
+                          }),
+                          secondary: Number(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono-num"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={handleOpenQualifiers}
+                className="px-6 py-2.5 rounded-xl bg-emerald-400 text-slate-950 font-extrabold text-xs cursor-pointer hover:bg-emerald-300"
+              >
+                🚀 تفعيل التصفيات وفق هذه الإعدادات الآن
+              </button>
+            </div>
+          </div>
+
+          {/* Default School Name, Region/Governorate & Country Settings */}
+          <div className="p-4 rounded-xl bg-slate-950/80 border border-amber-400/40 grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label className="block text-amber-300 font-bold mb-1">🏫 اسم المدرسة الافتراضي</label>
+              <input
+                type="text"
+                value={settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}
+                onChange={(e) =>
+                  setSettings({ ...settings, defaultSchoolName: e.target.value })
+                }
+                placeholder="مثال: مدرسة عيون مصر للغات"
+                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-amber-300 font-bold mb-1">📍 المنطقة / المحافظة الافتراضية</label>
+              <input
+                type="text"
+                value={settings.defaultRegion || 'القاهرة'}
+                onChange={(e) =>
+                  setSettings({ ...settings, defaultRegion: e.target.value })
+                }
+                placeholder="مثال: القاهرة / الجيزة"
+                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-amber-300 font-bold mb-1">🌍 البلد الافتراضي</label>
+              <input
+                type="text"
+                value={settings.defaultCountry || 'مصر 🇪🇬'}
+                onChange={(e) =>
+                  setSettings({ ...settings, defaultCountry: e.target.value })
+                }
+                placeholder="مثال: مصر 🇪🇬"
+                className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-xs">
             <div>
               <label className="block text-slate-400 mb-1">تاريخ البداية</label>
@@ -753,6 +1886,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* School Name, Region & Country for Team */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800">
+              <div>
+                <label className="block text-[11px] text-amber-300 font-bold mb-1">🏫 اسم المدرسة</label>
+                <input
+                  type="text"
+                  value={teamSchool}
+                  onChange={(e) => setTeamSchool(e.target.value)}
+                  placeholder="مثال: مدرسة عيون مصر للغات"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-amber-300 font-bold mb-1">📍 المنطقة / المحافظة</label>
+                <input
+                  type="text"
+                  value={teamRegion}
+                  onChange={(e) => setTeamRegion(e.target.value)}
+                  placeholder="مثال: القاهرة / الجيزة"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-amber-300 font-bold mb-1">🌍 البلد</label>
+                <input
+                  type="text"
+                  value={teamCountry}
+                  onChange={(e) => setTeamCountry(e.target.value)}
+                  placeholder="مثال: مصر 🇪🇬"
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                />
+              </div>
+            </div>
+
             {/* Dynamic 4 or 5 Players Input Rows */}
             <div className="space-y-2.5">
               <div className="text-xs font-bold text-amber-400">
@@ -842,6 +2009,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const newTeam: Team = {
                   id: `team-${ts}`,
                   name: teamName.trim(),
+                  schoolName: teamSchool.trim() || settings.defaultSchoolName || 'مدرسة عيون مصر للغات',
+                  region: teamRegion.trim() || settings.defaultRegion || 'القاهرة',
+                  country: teamCountry.trim() || settings.defaultCountry || 'مصر 🇪🇬',
                   emblem: teamEmblem || '🏆',
                   color: teamColor,
                   captainId: builtMembers[0].id,
@@ -875,8 +2045,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="flex items-center justify-between">
                   <div>
                     <h4 className="text-lg font-bold text-white font-display">{t.name}</h4>
-                    <span className="text-[11px] text-amber-400 font-semibold">
+                    <span className="text-[11px] text-amber-400 font-semibold block">
                       التشكيل الحالي: {t.members.length} لاعبين (الحد المسموح: 4 أو 5 لاعبين)
+                    </span>
+                    <span className="text-[11px] text-emerald-300 block mt-0.5">
+                      🏫 {t.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1316,21 +2489,125 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* 6. RESULTS OVERVIEW */}
+      {/* 6. RESULTS OVERVIEW (#53: Top Students, Top Schools, Top Administrations, Top Governorates) */}
       {section === 'results' && (
-        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-white font-display">📊 ملخص نتائج الفرق والطلاب</h3>
-            <button
-              onClick={handleExportCSV}
-              className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
-            >
-              تصدير جدول النتائج CSV
-            </button>
+        <div className="space-y-6">
+          <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <span className="text-xs font-bold text-amber-400">
+                📊 النتائج العامة المعتمدة (تُنشر تلقائياً مع الحفاظ على خصوصية البيانات)
+              </span>
+              <h3 className="text-xl font-bold text-white font-display mt-0.5">
+                🏆 أفضل الطلاب · 🏫 أفضل المدارس · 📍 أفضل الإدارات · 🗺️ أفضل المحافظات
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCertifyAndPublishResults}
+                className="px-4 py-2 rounded-xl bg-emerald-400 text-slate-950 font-bold text-xs cursor-pointer"
+              >
+                🏆 اعتماد ونشر النتائج العامة
+              </button>
+              <button
+                onClick={handleExportCSV}
+                className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+              >
+                تصدير جدول النتائج CSV
+              </button>
+            </div>
           </div>
-          <p className="text-xs text-slate-400">
-            يتم حفظ جميع تعديلات المشرف والأسئلة والنتائج محلياً في المتصفح بشكل فوري لتعمل المنصة بكامل طاقتها في قاعة المدرسة.
-          </p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Top Schools */}
+            <div className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
+              <h4 className="text-base font-bold text-amber-400 font-display">
+                🏫 أفضل المدارس المشاركة
+              </h4>
+              <div className="space-y-2">
+                {aggregatedRankings.topSchools.map((sch, i) => (
+                  <div
+                    key={sch.name}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-white">
+                        #{i + 1} {sch.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400">{sch.subLabel}</div>
+                    </div>
+                    <div className="text-left">
+                      <div className="font-mono-num font-bold text-emerald-400">
+                        متوسط {sch.avgScore} نقطة
+                      </div>
+                      <div className="text-[10px] text-amber-300">
+                        {sch.qualifiedCount} متأهل من {sch.participantsCount}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Educational Administrations */}
+            <div className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
+              <h4 className="text-base font-bold text-sky-400 font-display">
+                📍 أفضل الإدارات التعليمية
+              </h4>
+              <div className="space-y-2">
+                {aggregatedRankings.topAdministrations.map((adm, i) => (
+                  <div
+                    key={adm.name}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-white">
+                        #{i + 1} {adm.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400">{adm.subLabel}</div>
+                    </div>
+                    <div className="text-left">
+                      <div className="font-mono-num font-bold text-sky-400">
+                        متوسط {adm.avgScore} نقطة
+                      </div>
+                      <div className="text-[10px] text-amber-300">
+                        {adm.qualifiedCount} متأهل
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Governorates */}
+            <div className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
+              <h4 className="text-base font-bold text-emerald-400 font-display">
+                🗺️ أفضل المحافظات المشاركة
+              </h4>
+              <div className="space-y-2">
+                {aggregatedRankings.topGovernorates.map((gov, i) => (
+                  <div
+                    key={gov.name}
+                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-white">
+                        #{i + 1} محافظة {gov.name}
+                      </div>
+                      <div className="text-[11px] text-slate-400">{gov.subLabel}</div>
+                    </div>
+                    <div className="text-left">
+                      <div className="font-mono-num font-bold text-emerald-400">
+                        متوسط {gov.avgScore} نقطة
+                      </div>
+                      <div className="text-[10px] text-amber-300">
+                        {gov.participantsCount} مشارك · {gov.qualifiedCount} متأهل
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

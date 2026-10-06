@@ -18,8 +18,17 @@ import {
   GradeNumber,
   CompetitionSettings,
   QualifierDomain,
+  EducationalStage,
 } from '../types/competition';
 import { DOMAIN_META, QUALIFIER_50_QUESTIONS, PRACTICE_10_QUESTIONS } from '../data/qualifierQuestions';
+import {
+  STAGE_METADATA,
+  GRADE_LABELS,
+  resolveStageFromGrade,
+  buildStudentGroupingPath,
+  generateBalancedStudentExam,
+  gradeStudentExamAutomatically,
+} from '../services/qualificationEngine';
 import { soundEngine } from '../utils/sound';
 
 interface QualifiersAndPracticeProps {
@@ -49,6 +58,14 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   const [studentName, setStudentName] = useState('');
   const [grade, setGrade] = useState<GradeNumber>('5');
   const [className, setClassName] = useState('5 / أ');
+  const [governorate, setGovernorate] = useState(settings.defaultRegion || '');
+  const [administration, setAdministration] = useState(
+    settings.defaultAdministration || ''
+  );
+  const [schoolName, setSchoolName] = useState(
+    settings.defaultSchoolName || ''
+  );
+  const [country, setCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
   const [codeInput, setCodeInput] = useState('');
   const [generatedTicketCode, setGeneratedTicketCode] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -63,14 +80,21 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     mode === 'qualifier' ? settings.qualifierDurationMinutes * 60 : 10 * 60
   );
   const [startTimeMs, setStartTimeMs] = useState<number>(0);
+  const [entryTimeStr, setEntryTimeStr] = useState<string>('');
+  const [timeoutTriggered, setTimeoutTriggered] = useState<boolean>(false);
 
   // Practice immediate feedback
   const [practiceFeedbackIdx, setPracticeFeedbackIdx] = useState<number | null>(null);
 
-  const baseList: QualifierQuestion[] =
-    mode === 'practice'
-      ? PRACTICE_10_QUESTIONS
-      : [...customQuestions, ...QUALIFIER_50_QUESTIONS].slice(0, 50);
+  const rawPool: QualifierQuestion[] = [...customQuestions, ...QUALIFIER_50_QUESTIONS];
+
+  const baseList: QualifierQuestion[] = React.useMemo(() => {
+    if (mode === 'practice') return PRACTICE_10_QUESTIONS;
+    if (activeStudent) {
+      return generateBalancedStudentExam(rawPool, activeStudent, settings);
+    }
+    return rawPool.slice(0, settings.questionsCountPerExam || 50);
+  }, [mode, activeStudent?.id, activeStudent?.participationCode, customQuestions.length, settings.questionsCountPerExam, settings.randomizeQuestionsOrder, settings.randomizeOptionsOrder]);
 
   const questionList: QualifierQuestion[] =
     selectedDomainFilter === 'ALL'
@@ -89,11 +113,12 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     setSecondsLeft(mode === 'qualifier' ? settings.qualifierDurationMinutes * 60 : 10 * 60);
   }, [mode, settings.qualifierDurationMinutes]);
 
-  // Countdown Timer
+  // Countdown Timer (Auto-submits when time reaches 0 without supervisor intervention)
   useEffect(() => {
     if (!examStarted || examFinished) return;
     if (secondsLeft <= 0) {
-      handleFinishExam();
+      setTimeoutTriggered(true);
+      handleFinishExam(true);
       return;
     }
     const timer = setInterval(() => {
@@ -108,6 +133,8 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  const autoDetectedStage: EducationalStage = resolveStageFromGrade(grade);
+
   const handleCreateStudentTicket = (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentName.trim()) return;
@@ -116,13 +143,18 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
       codeInput.trim().toUpperCase() ||
       `OM-${grade}${Math.floor(100 + Math.random() * 899)}`;
 
+    const maxAttempts = settings.allowedAttemptsPerStudent || 1;
+
     // Check if code already exists
     const existing = students.find(
       (s) => s.participationCode.toUpperCase() === cleanCode
     );
     if (existing) {
-      if (existing.completedQualifier) {
-        setLoginError('هذا الكود قام بتسليم اختبار التصفيات مسبقاً! لا يُسمح بإعادة الإرسال أكثر من مرة.');
+      const used = existing.attemptsUsed || (existing.completedQualifier ? 1 : 0);
+      if (existing.completedQualifier && used >= maxAttempts) {
+        setLoginError(
+          `🔒 قام النظام تلقائياً بمنع إعادة المحاولة: هذا الكود استنفد عدد المحاولات المسموح بها (${used}/${maxAttempts}).`
+        );
         setActiveStudent(existing);
         return;
       }
@@ -133,12 +165,20 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
       return;
     }
 
+    const stage = resolveStageFromGrade(grade);
     const newStu: StudentProfile = {
       id: `stu-${Date.now()}`,
       name: studentName.trim(),
       grade,
+      stage,
       className: className.trim() || `${grade} / أ`,
+      schoolName: schoolName.trim() || 'مدرستي',
+      administration: administration.trim() || 'الإدارة التعليمية',
+      governorate: governorate.trim() || 'المحافظة',
+      region: governorate.trim() || 'المحافظة',
+      country: country.trim() || 'مصر 🇪🇬',
       participationCode: cleanCode,
+      attemptsUsed: 0,
       completedQualifier: false,
       scores: {
         total: 0,
@@ -164,16 +204,28 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   };
 
   const handleStartExamNow = () => {
-    if (mode === 'qualifier' && activeStudent?.completedQualifier) {
-      setLoginError('لقد قمت بأداء وتسليم اختبار التصفيات من قبل. يمكنك استعراض بطاقة العبقري الخاصة بك.');
+    const maxAttempts = settings.allowedAttemptsPerStudent || 1;
+    const used = activeStudent?.attemptsUsed || (activeStudent?.completedQualifier ? 1 : 0);
+    if (mode === 'qualifier' && activeStudent?.completedQualifier && used >= maxAttempts) {
+      setLoginError(
+        `لقد استنفدت المحاولة المسموحة (${used}/${maxAttempts}). يمكنك استعراض بطاقة العبقري وحالة التأهل التلقائي.`
+      );
       return;
     }
     soundEngine.playBuzzer();
     setExamStarted(true);
     setExamFinished(false);
+    setTimeoutTriggered(false);
     setCurrentIndex(0);
     setAnswers({});
     setStartTimeMs(Date.now());
+    setEntryTimeStr(
+      new Date().toLocaleTimeString('ar-EG', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    );
     setSecondsLeft(mode === 'qualifier' ? settings.qualifierDurationMinutes * 60 : 10 * 60);
   };
 
@@ -192,7 +244,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     }
   };
 
-  const handleFinishExam = () => {
+  const handleFinishExam = (isTimeoutAutoSubmit = false) => {
     soundEngine.playFanfare();
     setExamFinished(true);
     setExamStarted(false);
@@ -200,87 +252,22 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     if (mode === 'practice' || !activeStudent) return;
 
     const elapsedSec = Math.max(
-      30,
+      15,
       Math.floor((Date.now() - startTimeMs) / 1000)
     );
 
-    // Calculate domain scores
-    const domainCorrect: Record<QualifierDomain, number> = {
-      science: 0,
-      math: 0,
-      arabic: 0,
-      egypt_world: 0,
-      logic: 0,
-      observation: 0,
-      general_culture: 0,
-      technology: 0,
-    };
+    const gradedStudent = gradeStudentExamAutomatically(
+      activeStudent,
+      baseList,
+      answers,
+      elapsedSec,
+      entryTimeStr || '١٠:٠٠ ص',
+      isTimeoutAutoSubmit,
+      settings
+    );
 
-    const domainTotal: Record<QualifierDomain, number> = {
-      science: 0,
-      math: 0,
-      arabic: 0,
-      egypt_world: 0,
-      logic: 0,
-      observation: 0,
-      general_culture: 0,
-      technology: 0,
-    };
-
-    let rawTotalPoints = 0;
-
-    questionList.forEach((q) => {
-      domainTotal[q.domain] = (domainTotal[q.domain] || 0) + 1;
-      const chosen = answers[q.id];
-      if (chosen === q.correctIndex) {
-        domainCorrect[q.domain] = (domainCorrect[q.domain] || 0) + 1;
-        rawTotalPoints += q.points;
-      }
-    });
-
-    const pct = (dom: QualifierDomain) =>
-      domainTotal[dom] > 0
-        ? Math.round((domainCorrect[dom] / domainTotal[dom]) * 100)
-        : 85;
-
-    const maxDurationSec = settings.qualifierDurationMinutes * 60;
-    const speedRatio = Math.max(0.6, 1 - elapsedSec / (maxDurationSec * 1.25));
-    const speedScore = Math.min(99, Math.round(speedRatio * 100));
-
-    const earnedBadges: string[] = [];
-    if (pct('science') >= 80) earnedBadges.push('🔬 عبقري العلوم');
-    if (pct('logic') >= 80) earnedBadges.push('🧠 عبقري المنطق');
-    if (pct('math') >= 80) earnedBadges.push('➗ عبقري الحساب');
-    if (pct('observation') >= 80) earnedBadges.push('👁️ عين الصقر');
-    if (pct('arabic') >= 80) earnedBadges.push('📚 عبقري اللغة');
-    if (earnedBadges.length === 0) earnedBadges.push('🌟 نجم المسابقة');
-
-    const updatedStudent: StudentProfile = {
-      ...activeStudent,
-      completedQualifier: true,
-      qualifierSubmittedAt: new Date().toLocaleTimeString('ar-EG', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      qualifierDurationSeconds: elapsedSec,
-      scores: {
-        total: rawTotalPoints,
-        speedScore,
-        logic: pct('logic'),
-        science: pct('science'),
-        arabic: pct('arabic'),
-        observation: pct('observation'),
-        math: pct('math'),
-        egypt_world: pct('egypt_world'),
-        general_culture: pct('general_culture'),
-        technology: pct('technology'),
-      },
-      qualifiedForFinals: rawTotalPoints >= 300,
-      badges: earnedBadges,
-    };
-
-    setActiveStudent(updatedStudent);
-    onCompleteQualifier(updatedStudent.id, updatedStudent);
+    setActiveStudent(gradedStudent);
+    onCompleteQualifier(gradedStudent.id, gradedStudent);
   };
 
   // ==================== PRACTICE MODE VIEW ====================
@@ -365,7 +352,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-300 mb-1">الصف الدراسي *</label>
+                <label className="block text-xs text-slate-300 mb-1">الصف الدراسي (توزيع تلقائي للمرحلة) *</label>
                 <select
                   value={grade}
                   onChange={(e) => {
@@ -375,9 +362,26 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                   }}
                   className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-none"
                 >
-                  <option value="4">الصف الرابع الابتدائي</option>
-                  <option value="5">الصف الخامس الابتدائي</option>
-                  <option value="6">الصف السادس الابتدائي</option>
+                  <optgroup label="ابتدائي صغير (الصفوف 1 - 3)">
+                    <option value="1">الصف الأول الابتدائي</option>
+                    <option value="2">الصف الثاني الابتدائي</option>
+                    <option value="3">الصف الثالث الابتدائي</option>
+                  </optgroup>
+                  <optgroup label="ابتدائي كبير (الصفوف 4 - 6)">
+                    <option value="4">الصف الرابع الابتدائي</option>
+                    <option value="5">الصف الخامس الابتدائي</option>
+                    <option value="6">الصف السادس الابتدائي</option>
+                  </optgroup>
+                  <optgroup label="المرحلة الإعدادية (1ع - 3ع)">
+                    <option value="7">الصف الأول الإعدادي</option>
+                    <option value="8">الصف الثاني الإعدادي</option>
+                    <option value="9">الصف الثالث الإعدادي</option>
+                  </optgroup>
+                  <optgroup label="المرحلة الثانوية (1ث - 3ث)">
+                    <option value="10">الصف الأول الثانوي</option>
+                    <option value="11">الصف الثاني الثانوي</option>
+                    <option value="12">الصف الثالث الثانوي</option>
+                  </optgroup>
                 </select>
               </div>
               <div>
@@ -390,6 +394,73 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                   placeholder="مثال: 5 / أ"
                   className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-none"
                 />
+              </div>
+            </div>
+
+            {/* Governorate, Educational Administration, School Name & Country Fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">🗺️ المحافظة / المنطقة *</label>
+                <input
+                  required
+                  type="text"
+                  value={governorate}
+                  onChange={(e) => setGovernorate(e.target.value)}
+                  placeholder="اكتب اسم المحافظة أو المنطقة..."
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">📍 الإدارة التعليمية *</label>
+                <input
+                  required
+                  type="text"
+                  value={administration}
+                  onChange={(e) => setAdministration(e.target.value)}
+                  placeholder="اكتب اسم الإدارة التعليمية..."
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">🏫 اسم المدرسة *</label>
+                <input
+                  required
+                  type="text"
+                  value={schoolName}
+                  onChange={(e) => setSchoolName(e.target.value)}
+                  placeholder="اكتب اسم مدرستك..."
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-amber-300 font-bold mb-1">🌍 البلد *</label>
+                <input
+                  required
+                  type="text"
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  placeholder="اكتب اسم البلد..."
+                  className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Automatic Group Placement Preview */}
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-400/40 text-xs space-y-1">
+              <div className="font-bold text-emerald-300 flex items-center justify-between">
+                <span>🤖 التسكين والتوزيع الآلي في النظام الذاتي:</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 text-[10px]">
+                  {STAGE_METADATA[autoDetectedStage].label}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-200 font-mono-num">
+                {buildStudentGroupingPath({
+                  grade,
+                  stage: autoDetectedStage,
+                  governorate,
+                  administration,
+                  schoolName,
+                })}
               </div>
             </div>
 
@@ -419,13 +490,18 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         {/* Ticket Preview & Exam Distribution Breakdown */}
         <div className="lg:col-span-6 space-y-6">
           {activeStudent && (
-            <div className="rounded-2xl bg-gradient-to-br from-[#162647] to-[#111C35] border-2 border-amber-400/70 p-6 shadow-xl">
+            <div className="rounded-2xl bg-gradient-to-br from-[#162647] to-[#111C35] border-2 border-amber-400/70 p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between border-b border-slate-700/80 pb-4">
                 <div>
-                  <div className="text-xs text-amber-400 font-semibold">🎟️ تذكرة دخول رسمية — مدرسة عيون مصر</div>
+                  <div className="text-xs text-amber-400 font-semibold">
+                    🎟️ تذكرة دخول رسمية — {activeStudent.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}
+                  </div>
                   <h3 className="text-xl font-bold text-white font-display mt-0.5">{activeStudent.name}</h3>
                   <div className="text-xs text-slate-300 mt-1">
-                    الصف {activeStudent.grade === '4' ? 'الرابع' : activeStudent.grade === '5' ? 'الخامس' : 'السادس'} الابتدائي · الفصل: {activeStudent.className}
+                    {GRADE_LABELS[activeStudent.grade] || `الصف ${activeStudent.grade}`} · الفصل: {activeStudent.className}
+                  </div>
+                  <div className="text-[11px] text-emerald-300 font-semibold mt-1">
+                    🤖 المسار التلقائي: {buildStudentGroupingPath(activeStudent)}
                   </div>
                 </div>
                 <div className="text-left bg-slate-950 px-4 py-2.5 rounded-xl border border-amber-400/40">
@@ -436,17 +512,48 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              {/* Automatic Qualification Next Round Banner if Student Qualified */}
+              {activeStudent.completedQualifier && activeStudent.qualifiedForFinals && (
+                <div className="p-4 rounded-xl bg-emerald-500/15 border-2 border-emerald-400/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-extrabold text-emerald-300">
+                      🟢 «لقد تأهلت تلقائياً إلى المرحلة التالية!»
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[11px] font-bold">
+                      الترتيب #{activeStudent.stageRank || activeStudent.autoRank || 1} في مرحلتك
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-200 pt-1">
+                    <div>
+                      🎯 المرحلة التالية:{' '}
+                      <strong className="text-amber-300">
+                        {activeStudent.nextRoundInfo?.roundTitle || '📍 تصفيات الإدارة التعليمية'}
+                      </strong>
+                    </div>
+                    <div>
+                      📅 موعد الجولة القادمة:{' '}
+                      <strong className="font-mono-num text-emerald-300">
+                        {activeStudent.nextRoundInfo?.scheduledDate || settings.endDate}
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    💡 التعليمات: {activeStudent.nextRoundInfo?.instructions || 'انتقلت تلقائياً دون الحاجة لأي إجراء يدوي. ادخل بكود مشاركتك عند فتح الجولة.'}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 {activeStudent.completedQualifier ? (
                   <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
                     <span className="text-xs text-emerald-400 font-semibold">
-                      ✓ تم أداء وتسليم اختبار التصفيات بنجاح ({activeStudent.qualifierSubmittedAt})
+                      ✓ تم التصحيح والترتيب آلياً ({activeStudent.qualifierSubmittedAt}) · الدرجة: {activeStudent.scores.total} نقطة
                     </span>
                     <button
                       onClick={() => onNavigateView('genius_card')}
                       className="px-4 py-2 text-xs font-bold bg-amber-400 text-slate-950 rounded-lg hover:bg-amber-300"
                     >
-                      عرض بطاقة العبقري 🪪
+                      عرض بطاقة العبقري وتقرير التصحيح 🪪
                     </button>
                   </div>
                 ) : (
@@ -455,7 +562,9 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                     className="w-full py-3.5 text-sm font-bold bg-emerald-500 text-slate-950 rounded-xl hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg"
                   >
                     <Play className="w-4 h-4" />
-                    <span>🚀 دخول اختبار التصفيات الآن (50 سؤالاً — 30 دقيقة)</span>
+                    <span>
+                      🚀 دخول الاختبار الإلكتروني التلقائي ({settings.questionsCountPerExam || 50} سؤالاً — {settings.qualifierDurationMinutes} دقيقة)
+                    </span>
                   </button>
                 )}
               </div>
@@ -507,13 +616,84 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         </div>
 
         {mode === 'qualifier' ? (
-          <>
+          <div className="space-y-5">
+            {timeoutTriggered && (
+              <div className="inline-block px-4 py-1.5 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-bold">
+                ⏱️ انتهى الوقت! قام النظام تلقائياً بحفظ إجاباتك وتصحيح الاختبار دون تدخل بشري.
+              </div>
+            )}
             <h2 className="text-2xl font-bold text-white font-display">
-              «تم تسجيل إجاباتك بنجاح. سيتم إعلان نتائج التصفيات بعد انتهاء المسابقة.»
+              🤖 تم التصحيح الآلي واحتساب النتيجة والترتيب تلقائياً!
             </h2>
-            <p className="text-sm text-slate-300 mt-3 leading-relaxed">
-              أحسنت يا <strong className="text-amber-400">{activeStudent?.name}</strong>! تم حفظ وقت البداية والنهاية وكود مشاركتك (<span className="font-mono-num text-amber-300">{activeStudent?.participationCode}</span>) في سجل مدرسة عيون مصر، وتم إصدار بطاقة العبقري التحفيزية الخاصة بك.
+            <p className="text-sm text-slate-300 leading-relaxed">
+              أحسنت يا <strong className="text-amber-400">{activeStudent?.name}</strong>! قام محرك التصفيات الذاتي بتصحيح إجاباتك وحساب نقاطك وزمن استجابتك وتحديث ترتيبك في مجموعة ({STAGE_METADATA[activeStudent?.stage || 'primary_upper'].shortLabel}).
             </p>
+
+            {/* Automated Grading Breakdown Metrics */}
+            {activeStudent?.gradingReport && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="text-slate-400">الإجابات الصحيحة</div>
+                  <div className="text-lg font-extrabold font-mono-num text-emerald-400 mt-0.5">
+                    {activeStudent.gradingReport.correctCount} / {questionList.length}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="text-slate-400">مجموع النقاط والنسبة</div>
+                  <div className="text-lg font-extrabold font-mono-num text-amber-400 mt-0.5">
+                    {activeStudent.scores.total} ({activeStudent.gradingReport.percentage}%)
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="text-slate-400">زمن الاختبار الكلي</div>
+                  <div className="text-lg font-extrabold font-mono-num text-sky-400 mt-0.5">
+                    {activeStudent.gradingReport.totalDurationSeconds} ث
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                  <div className="text-slate-400">متوسط زمن السؤال</div>
+                  <div className="text-lg font-extrabold font-mono-num text-purple-400 mt-0.5">
+                    {activeStudent.gradingReport.avgSecondsPerQuestion} ث/سؤال
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Automatic Next Round Qualification Card */}
+            {activeStudent?.qualifiedForFinals && (
+              <div className="p-5 rounded-2xl bg-emerald-500/15 border-2 border-emerald-400 text-right space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-base font-extrabold text-emerald-300">
+                    🟢 مبروك! «لقد تأهلت تلقائياً للمرحلة التالية!»
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-400 text-slate-950 text-xs font-bold">
+                    {activeStudent.nextRoundInfo?.statusLabel || 'مؤهل تلقائياً'}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-200 space-y-1">
+                  <div>
+                    🏆 الجولة القادمة:{' '}
+                    <strong className="text-amber-300">
+                      {activeStudent.nextRoundInfo?.roundTitle || '📍 تصفيات الإدارة التعليمية'}
+                    </strong>
+                  </div>
+                  <div>
+                    📅 الموعد المحدد:{' '}
+                    <strong className="font-mono-num text-emerald-300">
+                      {activeStudent.nextRoundInfo?.scheduledDate || settings.endDate}
+                    </strong>
+                  </div>
+                  <div>
+                    📋 تعليمات المشاركة:{' '}
+                    <span>
+                      {activeStudent.nextRoundInfo?.instructions ||
+                        'تم نقلك تلقائياً بواسطة النظام الذاتي دون الحاجة لمراجعة المشرف.'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 onClick={() => onNavigateView('genius_card')}
@@ -528,7 +708,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                 🧭 العودة إلى خريطة رحلة العباقرة
               </button>
             </div>
-          </>
+          </div>
         ) : (
           <>
             <h2 className="text-2xl font-bold text-white font-display">
@@ -611,7 +791,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
           </div>
 
           <button
-            onClick={handleFinishExam}
+            onClick={() => handleFinishExam(false)}
             className="px-4 py-2 text-xs font-bold bg-emerald-500 text-slate-950 rounded-xl hover:bg-emerald-400 transition-colors whitespace-nowrap"
           >
             تسليم الاختبار ({answeredCount}/{questionList.length})
@@ -780,7 +960,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
             </button>
           ) : (
             <button
-              onClick={handleFinishExam}
+              onClick={() => handleFinishExam(false)}
               className="px-6 py-2.5 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition-colors"
             >
               إنهاء وتسليم الإجابات ✓

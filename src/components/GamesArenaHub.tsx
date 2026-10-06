@@ -37,7 +37,17 @@ import { soundEngine } from '../utils/sound';
 interface GamesArenaHubProps {
   initialGameTab?: ChallengeGameId;
   teams: Team[];
-  students: { id: string; name: string; grade: '4' | '5' | '6'; className: string; participationCode: string; scores: { total: number } }[];
+  students: {
+    id: string;
+    name: string;
+    grade: string;
+    className: string;
+    schoolName?: string;
+    region?: string;
+    country?: string;
+    participationCode: string;
+    scores: { total: number };
+  }[];
   onAwardTeamPoints: (teamId: string, deltaPoints: number) => void;
   onAwardStudentPoints?: (studentId: string, deltaPoints: number) => void;
   onUseTeamCard: (teamId: string, cardKey: 'challengeCard' | 'swapQuestionCard' | 'doublePointsCard') => void;
@@ -774,6 +784,14 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                 </div>
               </div>
 
+              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-emerald-300 flex flex-wrap items-center gap-2">
+                <span>🏫 {activeTeam?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}</span>
+                <span>·</span>
+                <span>📍 {activeTeam?.region || settings.defaultRegion || 'القاهرة'}</span>
+                <span>·</span>
+                <span>🌍 {activeTeam?.country || settings.defaultCountry || 'مصر 🇪🇬'}</span>
+              </div>
+
               {/* 4 or 5 Players Podium Seats */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
                 {activeTeam?.members.map((m, idx) => {
@@ -849,6 +867,14 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                 </div>
               </div>
 
+              <div className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-sky-300 flex flex-wrap items-center gap-2">
+                <span>🏫 {rivalTeam?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}</span>
+                <span>·</span>
+                <span>📍 {rivalTeam?.region || settings.defaultRegion || 'القاهرة'}</span>
+                <span>·</span>
+                <span>🌍 {rivalTeam?.country || settings.defaultCountry || 'مصر 🇪🇬'}</span>
+              </div>
+
               {/* 4 or 5 Players Podium Seats */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
                 {rivalTeam?.members.map((m, idx) => {
@@ -902,13 +928,18 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                   <div className="text-[10px] text-slate-400">نقطة فردية</div>
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-300">
-                  🎓 الطالب: <strong className="text-white">{activeStudentObj?.name}</strong> (فصل {activeStudentObj?.className})
-                </span>
-                <span className="font-mono-num text-amber-300 font-bold">
-                  كود: {activeStudentObj?.participationCode}
-                </span>
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">
+                    🎓 الطالب: <strong className="text-white">{activeStudentObj?.name}</strong> (فصل {activeStudentObj?.className})
+                  </span>
+                  <span className="font-mono-num text-amber-300 font-bold">
+                    كود: {activeStudentObj?.participationCode}
+                  </span>
+                </div>
+                <div className="text-[11px] text-emerald-300">
+                  🏫 {activeStudentObj?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {activeStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {activeStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                </div>
               </div>
             </div>
 
@@ -958,13 +989,18 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                   <div className="text-[10px] text-slate-400">نقطة فردية</div>
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
-                <span className="text-slate-300">
-                  🎓 الطالب: <strong className="text-white">{rivalStudentObj?.name}</strong> (فصل {rivalStudentObj?.className})
-                </span>
-                <span className="font-mono-num text-sky-300 font-bold">
-                  كود: {rivalStudentObj?.participationCode}
-                </span>
+              <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-300">
+                    🎓 الطالب: <strong className="text-white">{rivalStudentObj?.name}</strong> (فصل {rivalStudentObj?.className})
+                  </span>
+                  <span className="font-mono-num text-sky-300 font-bold">
+                    كود: {rivalStudentObj?.participationCode}
+                  </span>
+                </div>
+                <div className="text-[11px] text-sky-300">
+                  🏫 {rivalStudentObj?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {rivalStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {rivalStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                </div>
               </div>
             </div>
           </div>
