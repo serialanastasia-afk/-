@@ -20,6 +20,44 @@ export type QualificationPathMode =
 
 export type HierarchyLevel = 'school' | 'administration' | 'governorate' | 'republic';
 
+export type AnnualPhaseId =
+  | 'phase_1_school'            // سبتمبر – أكتوبر: تصفيات المدارس
+  | 'phase_2_administration'    // نوفمبر – ديسمبر: تصفيات الإدارات التعليمية
+  | 'phase_3_winter_sector'     // يناير – فبراير: التحدي الشتوي وتصفيات القطاعات
+  | 'phase_4_governorate'       // مارس – أبريل: تصفيات أبطال المحافظات الـ27
+  | 'phase_5_republic_knockout' // مايو – يونيو: الأدوار الإقصائية للجمهورية
+  | 'phase_6_grand_finals';     // يوليو – أغسطس: النهائيات الكبرى وكأس السوبر
+
+export interface AnnualQualificationPhase {
+  id: AnnualPhaseId;
+  order: number;
+  title: string;
+  shortTitle: string;
+  monthsLabel: string;
+  startDate: string;
+  endDate: string;
+  targetLevel: HierarchyLevel;
+  icon: string;
+  badgeColor: string;
+  description: string;
+  qualificationRule: string;
+  questionsCount: number;
+  durationMinutes: number;
+  AdvancementQuotaLabel: string;
+  status: 'completed' | 'active' | 'upcoming';
+}
+
+export interface MonthlyChallengeItem {
+  monthNumber: number;
+  monthName: string;
+  seasonQuarter: 'الخريف' | 'الشتاء' | 'الربيع' | 'الصيف';
+  title: string;
+  focusDomain: string;
+  linkedPhaseId: AnnualPhaseId;
+  bonusPoints: number;
+  status: 'completed' | 'live' | 'upcoming';
+}
+
 export type QualifierDomain =
   | 'science'
   | 'math'
@@ -86,30 +124,40 @@ export interface RegisteredSchool {
 
 export interface SeasonArchiveItem {
   id: string;
-  seasonName: string;
-  year: string;
-  startDate: string;
-  endDate: string;
+  seasonName?: string;
+  title?: string;
+  year: string | number;
+  startDate?: string;
+  endDate?: string;
   status: 'active' | 'completed' | 'upcoming';
-  totalParticipants: number;
+  totalParticipants?: number;
+  totalStudents?: number;
   totalSchools: number;
   totalGovernorates: number;
-  championsByStage: {
+  championsByStage?: {
     primary_lower: { studentName: string; schoolName: string; governorate: string; points: number };
     primary_upper: { studentName: string; schoolName: string; governorate: string; points: number };
     preparatory: { studentName: string; schoolName: string; governorate: string; points: number };
     secondary: { studentName: string; schoolName: string; governorate: string; points: number };
   };
-  topSchoolName: string;
-  topGovernorateName: string;
+  topSchoolName?: string;
+  championSchoolName?: string;
+  topGovernorateName?: string;
+  championGovernorate?: string;
+  championStudentName?: string;
+  highlights?: string;
 }
 
 export interface SchoolScoringFormula {
-  avgStudentPointsWeight: number;   // وزن متوسط نقاط الطلاب (افتراضياً 50%)
-  qualifiedStudentsBonus: number;   // نقاط لكل طالب متأهل (افتراضياً 40 نقطة)
-  topThreePodiumBonus: number;      // مكافأة المراكز الثلاثة الأولى (افتراضياً 80 نقطة)
-  teamWinsBonus: number;            // مكافأة انتصارات فرق المدرسة (افتراضياً 35 نقطة)
-  maxParticipationCapBonus: number; // سقف نقاط المشاركة العددية لمنع فوز الكثرة العددية وحدها (بحد أقصى 100 نقطة)
+  avgStudentPointsWeight?: number;
+  qualifiedStudentsBonus?: number;
+  topThreePodiumBonus?: number;
+  teamWinsBonus?: number;
+  maxParticipationCapBonus?: number;
+  totalPointsWeight?: number;
+  avgScoreWeight?: number;
+  qualifiedBonusPoints?: number;
+  participantBonusPoints?: number;
 }
 
 export interface StudentProfile {
@@ -141,7 +189,10 @@ export interface StudentProfile {
   administrationRank?: number;
   governorateRank?: number;
   republicStageRank?: number;
+  republicRank?: number;
   qualifiedLevel?: HierarchyLevel | 'none';
+  currentAnnualPhaseReached?: AnnualPhaseId;
+  annualPhaseScores?: Partial<Record<AnnualPhaseId, number>>;
   nextRoundInfo?: {
     roundTitle: string;
     scheduledDate: string;
@@ -268,6 +319,7 @@ export type ChallengeGameId =
 
 export type AppView =
   | 'home'
+  | 'annual_roadmap'
   | 'journey'
   | 'qualifiers'
   | 'practice'
@@ -279,6 +331,9 @@ export type AppView =
   | 'national_rankings'
   | 'schools_hub'
   | 'egypt_map'
+  | 'certificates'
+  | 'seasons_archive'
+  | 'about_privacy'
   | 'awards'
   | 'how_to_play'
   | 'admin';
@@ -319,11 +374,14 @@ export interface CompetitionSettings {
   randomizeOptionsOrder?: boolean;
   qualificationPathMode?: QualificationPathMode;
   currentHierarchyLevel?: HierarchyLevel;
+  activeAnnualPhaseId?: AnnualPhaseId;
+  annualPhases?: AnnualQualificationPhase[];
   stageQuotas?: StageQuotas;
   allowStudentStageOverride?: boolean;
   publicNamePrivacyMode?: 'full_name' | 'abbreviated_name';
+  privacyMaskNames?: boolean;
   schoolScoringFormula?: SchoolScoringFormula;
-  enabledGames?: Record<ChallengeGameId, boolean>;
+  enabledGames?: any;
   qualifiedStudentsTarget: number;
   tournamentBracketSize: 16 | 8 | 4 | 2;
   allowBackNavigationInQualifier: boolean;

@@ -16,6 +16,9 @@ import {
   CompetitionSettings,
   MatchItem,
   CompetitionAward,
+  RegisteredSchool,
+  SeasonArchiveItem,
+  EducationalStage,
 } from './types/competition';
 import {
   INITIAL_DEMO_STUDENTS,
@@ -27,6 +30,9 @@ import {
   JOURNEY_NODES,
   APP_PROFILE_PRESETS,
   OFFICIAL_HERO_BANNER,
+  INITIAL_REGISTERED_SCHOOLS,
+  INITIAL_SEASONS_ARCHIVE,
+  DEFAULT_ANNUAL_PHASES,
 } from './data/challengesData';
 import { QualifiersAndPractice } from './components/QualifiersAndPractice';
 import { GamesArenaHub } from './components/GamesArenaHub';
@@ -37,31 +43,41 @@ import {
   TournamentAndLeaderboard,
   AwardsShowcaseView,
 } from './components/JourneyAndCards';
+import { NationalPlatformHub } from './components/NationalPlatformHub';
 import {
   STAGE_METADATA,
   SEASON_STATUS_META,
   runAutomatedRankingAndQualification,
+  computeAggregatedRankings,
 } from './services/qualificationEngine';
 import { soundEngine } from './utils/sound';
 
-const STORAGE_STUDENTS = 'om_geniuses_students_v4';
-const STORAGE_TEAMS = 'om_geniuses_teams_v4';
-const STORAGE_SETTINGS = 'om_geniuses_settings_v5';
+const STORAGE_STUDENTS = 'om_geniuses_students_v5';
+const STORAGE_TEAMS = 'om_geniuses_teams_v5';
+const STORAGE_SETTINGS = 'om_geniuses_settings_v7';
 const STORAGE_CUSTOM_QS = 'om_geniuses_custom_qs_v2';
 const STORAGE_AWARDS = 'om_geniuses_awards_v2';
+const STORAGE_SCHOOLS = 'om_geniuses_schools_v1';
+const STORAGE_ARCHIVE = 'om_geniuses_archive_v1';
 
 const SUB_NAV_ITEMS: { id: AppView; label: string }[] = [
   { id: 'home', label: '🏠 الرئيسية' },
-  { id: 'games_hub', label: '📺 استوديو برنامج العباقرة' },
+  { id: 'annual_roadmap', label: '📅 مراحل وتصفيات السنة (٦ مراحل)' },
+  { id: 'qualifiers', label: '📝 التسجيل والتصفيات' },
+  { id: 'practice', label: '🧠 جرّب المسابقة (١٠ أسئلة)' },
+  { id: 'national_rankings', label: '🇪🇬 الترتيب العام للجمهورية' },
+  { id: 'schools_hub', label: '🏫 المدارس المشاركة' },
+  { id: 'egypt_map', label: '🗺️ محافظات مصر (٢٧)' },
+  { id: 'games_hub', label: '📺 استوديو وألعاب العباقرة' },
   { id: 'teams', label: '🧩 الفرق (4 أو 5 لاعبين)' },
-  { id: 'qualifiers', label: '🟢 التصفيات الذاتية' },
-  { id: 'practice', label: '🧠 جرّب تدريباً' },
-  { id: 'journey', label: '🧭 خريطة الرحلة' },
   { id: 'genius_card', label: '🪪 بطاقة العبقري' },
+  { id: 'certificates', label: '📜 الشهادات الرقمية' },
+  { id: 'awards', label: '🏅 الأوسمة والجوائز' },
+  { id: 'journey', label: '🧭 خريطة الرحلة' },
   { id: 'tournament', label: '🏆 البطولة النهائية' },
-  { id: 'leaderboard', label: '📊 لوحة الأبطال' },
-  { id: 'awards', label: '🏅 جوائز المسابقة' },
-  { id: 'how_to_play', label: 'ℹ️ كيف نلعب؟' },
+  { id: 'leaderboard', label: '📊 إحصائيات الفرق' },
+  { id: 'seasons_archive', label: '🏛️ المواسم والأرشيف' },
+  { id: 'about_privacy', label: '🛡️ عن المسابقة والخصوصية' },
   { id: 'admin', label: '👩‍💼 لوحة المشرفة العامة' },
 ];
 
@@ -126,8 +142,70 @@ export default function App() {
     return OFFICIAL_AWARDS;
   });
 
+  const [registeredSchools, setRegisteredSchools] = useState<RegisteredSchool[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_SCHOOLS);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_REGISTERED_SCHOOLS;
+  });
+
+  const [seasonsArchive, setSeasonsArchive] = useState<SeasonArchiveItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_ARCHIVE);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return INITIAL_SEASONS_ARCHIVE;
+  });
+
   const [matches, setMatches] = useState<MatchItem[]>(INITIAL_MATCHES);
   const [activeStudent, setActiveStudent] = useState<StudentProfile | null>(students[0] || null);
+
+  // Compute initial multi-level rankings once on mount so all demo students have school/admin/gov/republic ranks
+  useEffect(() => {
+    setStudents((prev) => {
+      const { rankedStudents } = runAutomatedRankingAndQualification(prev, settings);
+      return rankedStudents;
+    });
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_SCHOOLS, JSON.stringify(registeredSchools));
+    } catch {}
+  }, [registeredSchools]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_ARCHIVE, JSON.stringify(seasonsArchive));
+    } catch {}
+  }, [seasonsArchive]);
+
+  const nationalAggregated = React.useMemo(
+    () => computeAggregatedRankings(students, settings.schoolScoringFormula),
+    [students, settings.schoolScoringFormula]
+  );
+
+  const liveStats = React.useMemo(() => {
+    const schoolNames = new Set([
+      ...students.map((s) => s.schoolName || 'مدرسة عيون مصر'),
+      ...registeredSchools.map((r) => r.name),
+    ]);
+    const adminNames = new Set([
+      ...students.map((s) => s.administration || 'إدارة تعليمية'),
+      ...registeredSchools.map((r) => r.administration),
+    ]);
+    const govNames = new Set([
+      ...students.map((s) => s.governorate || s.region || 'القاهرة'),
+      ...registeredSchools.map((r) => r.governorate),
+    ]);
+    return {
+      studentsCount: students.length,
+      schoolsCount: schoolNames.size,
+      administrationsCount: adminNames.size,
+      governoratesCount: govNames.size,
+    };
+  }, [students, registeredSchools]);
 
   // 🚨 Genius Alarm Modal State
   const [alarmOpen, setAlarmOpen] = useState(false);
@@ -257,24 +335,25 @@ export default function App() {
             className="cursor-pointer"
           >
             <div className="font-syne text-xl sm:text-2xl font-extrabold tracking-[-0.04em] text-[#d4af37] leading-none">
-              OYOUN MISR
+              OYOUN MISR · عباقرة عيون مصر
             </div>
-            <div className="text-[11px] text-[rgba(242,239,235,0.65)] font-bold mt-0.5">
-              {settings.defaultSchoolName
-                ? `${settings.defaultSchoolName}${settings.defaultRegion ? ` · ${settings.defaultRegion}` : ''}`
-                : 'مسابقة عباقرة عيون مصر · لجميع المدارس والمحافظات'}
+            <div className="text-[11px] text-[rgba(242,239,235,0.75)] font-bold mt-0.5">
+              🏆 مسابقة الجمهورية للمعرفة والذكاء والتفكير · لجميع مدارس ومحافظات مصر 🇪🇬
             </div>
           </div>
         </div>
 
-        <nav className="hidden md:flex items-center gap-8">
+        <nav className="hidden lg:flex items-center gap-6">
           {(
             [
               { id: 'home', label: 'الرئيسية' },
-              { id: 'journey', label: 'رحلة العباقرة' },
-              { id: 'qualifiers', label: 'التصفيات' },
+              { id: 'qualifiers', label: 'التسجيل والتصفيات' },
+              { id: 'practice', label: 'جرّب المسابقة' },
+              { id: 'national_rankings', label: 'ترتيب الجمهورية' },
+              { id: 'schools_hub', label: 'المدارس' },
+              { id: 'egypt_map', label: 'المحافظات (٢٧)' },
               { id: 'games_hub', label: 'الألعاب' },
-              { id: 'awards', label: 'الجوائز' },
+              { id: 'certificates', label: 'الشهادات' },
               { id: 'admin', label: 'المشرف' },
             ] as { id: AppView; label: string }[]
           ).map((navItem) => (
@@ -286,8 +365,8 @@ export default function App() {
               }}
               className={`bg-transparent border-none text-[0.8rem] font-bold cursor-pointer transition-colors ${
                 currentView === navItem.id
-                  ? 'text-[#f2efeb]'
-                  : 'text-[rgba(242,239,235,0.6)] hover:text-[#f2efeb]'
+                  ? 'text-[#d4af37]'
+                  : 'text-[rgba(242,239,235,0.65)] hover:text-[#f2efeb]'
               }`}
             >
               {navItem.label}
@@ -374,7 +453,12 @@ export default function App() {
                 </div>
               </div>
               <div>
-                <span className="label block mb-1">Primary Competition 2026 · Grades 4, 5 & 6</span>
+                <span className="label block mb-1">
+                  NATIONAL EGYPT COMPETITION 2026 · ALL SCHOOLS & 27 GOVERNORATES
+                </span>
+                <div className="text-xs font-extrabold text-emerald-400 mb-1">
+                  🇪🇬 مسابقة الجمهورية للمعرفة والذكاء والتفكير — مفتوحة لطلاب المدارس في جميع محافظات مصر
+                </div>
                 <button
                   onClick={() => setProfileModalOpen(true)}
                   className="text-xs text-[#d4af37] hover:underline flex items-center gap-1 cursor-pointer font-bold"
@@ -385,38 +469,194 @@ export default function App() {
               </div>
             </div>
             <h1
-              className="font-syne font-extrabold text-[#f2efeb] mb-6"
+              className="font-syne font-extrabold text-[#f2efeb] mb-3"
               style={{
-                fontSize: 'clamp(2.8rem, 5.5vw, 5.5rem)',
+                fontSize: 'clamp(2.6rem, 5vw, 5rem)',
                 lineHeight: 1.05,
                 letterSpacing: '-0.04em',
               }}
             >
-              عباقرة عيون مصر
+              🏆 عباقرة عيون مصر
             </h1>
+            <div className="text-base sm:text-lg font-extrabold text-[#d4af37] mb-2">
+              مسابقة الجمهورية للمعرفة والذكاء والتفكير
+            </div>
             <p className="hero-tagline mb-4">
               «فكّر أسرع… اعرف أكثر… العب كفريق!»
             </p>
 
+            {/* Live National Statistics Strip (#24: إحصائيات مباشرة في الصفحة الرئيسية) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5 max-w-[600px]">
+              <div
+                onClick={() => setCurrentView('national_rankings')}
+                className="p-3 rounded-xl bg-[#141A29] border border-emerald-400/40 hover:border-emerald-400 cursor-pointer text-center transition-all"
+              >
+                <div className="text-xl sm:text-2xl font-extrabold font-mono-num text-emerald-400">
+                  {liveStats.studentsCount}
+                </div>
+                <div className="text-[11px] text-slate-300 font-bold">👨‍🎓 طالب مشارك</div>
+              </div>
+              <div
+                onClick={() => setCurrentView('schools_hub')}
+                className="p-3 rounded-xl bg-[#141A29] border border-amber-400/40 hover:border-amber-400 cursor-pointer text-center transition-all"
+              >
+                <div className="text-xl sm:text-2xl font-extrabold font-mono-num text-amber-400">
+                  {liveStats.schoolsCount}
+                </div>
+                <div className="text-[11px] text-slate-300 font-bold">🏫 مدرسة مشاركة</div>
+              </div>
+              <div
+                onClick={() => setCurrentView('national_rankings')}
+                className="p-3 rounded-xl bg-[#141A29] border border-sky-400/40 hover:border-sky-400 cursor-pointer text-center transition-all"
+              >
+                <div className="text-xl sm:text-2xl font-extrabold font-mono-num text-sky-400">
+                  {liveStats.administrationsCount}
+                </div>
+                <div className="text-[11px] text-slate-300 font-bold">🏛️ إدارة تعليمية</div>
+              </div>
+              <div
+                onClick={() => setCurrentView('egypt_map')}
+                className="p-3 rounded-xl bg-[#141A29] border border-purple-400/40 hover:border-purple-400 cursor-pointer text-center transition-all"
+              >
+                <div className="text-xl sm:text-2xl font-extrabold font-mono-num text-purple-400">
+                  {liveStats.governoratesCount} / 27
+                </div>
+                <div className="text-[11px] text-slate-300 font-bold">🗺️ محافظة مصرية</div>
+              </div>
+            </div>
+
             {/* Official Artwork Banner Showcase */}
             <div
               onClick={() => setProfileModalOpen(true)}
-              className="relative group mb-6 rounded-2xl overflow-hidden border-2 border-[#d4af37]/80 shadow-2xl max-w-[600px] cursor-pointer"
+              className="relative group mb-5 rounded-2xl overflow-hidden border-2 border-[#d4af37]/80 shadow-2xl max-w-[600px] cursor-pointer"
             >
               <img
                 src={OFFICIAL_HERO_BANNER}
-                alt="عباقرة عيون مصر - فكّر أسرع... اعرف أكثر... العب كفريق!"
+                alt="عباقرة عيون مصر - مسابقة الجمهورية للمعرفة والذكاء والتفكير"
                 referrerPolicy="no-referrer"
                 className="w-full h-auto object-cover"
               />
             </div>
 
-            <p className="max-w-[520px] leading-[1.7] text-[rgba(242,239,235,0.6)] mb-5 text-sm sm:text-base">
-              مرحباً بك في البطولة التفاعلية الكبرى «عباقرة عيون مصر»! منصة مسابقات وتصفيات إلكترونية ذاتية الإدارة لجميع الطلاب والمدارس والإدارات التعليمية والمحافظات، تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي.
+            <p className="max-w-[580px] leading-[1.7] text-[rgba(242,239,235,0.75)] mb-4 text-sm">
+              «عيون مصر» هي اسم وهوية المسابقة الوطنية التفاعلية المفتوحة لطلاب المدارس الحكومية والرسمية للغات والخاصة والأزهرية والدولية في جميع محافظات جمهورية مصر العربية، ببنك أسئلة مستقل لكل مرحلة تعليمية وتصفيات إلكترونية ذاتية.
             </p>
 
+            {/* 📅 Year-Round 6-Phase Qualifiers Strip on Home Page */}
+            <div className="mb-5 p-4 rounded-2xl bg-gradient-to-l from-[#18294D] to-[#141A29] border-2 border-[#d4af37]/70 max-w-[600px] space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-extrabold text-[#d4af37]">
+                  📅 المسابقة على مدار السنة (٦ مراحل تصفيات متدرجة — سبتمبر إلى أغسطس):
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playSelectTile();
+                    setCurrentView('annual_roadmap');
+                  }}
+                  className="text-[11px] font-extrabold text-emerald-400 hover:underline cursor-pointer"
+                >
+                  عرض خريطة السنة الكاملة ←
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {(settings.annualPhases && settings.annualPhases.length > 0
+                  ? settings.annualPhases
+                  : DEFAULT_ANNUAL_PHASES
+                ).map((ph) => {
+                  const isCurr =
+                    (settings.activeAnnualPhaseId || 'phase_2_administration') === ph.id;
+                  return (
+                    <div
+                      key={ph.id}
+                      onClick={() => {
+                        soundEngine.playSelectTile();
+                        setCurrentView('annual_roadmap');
+                      }}
+                      className={`p-2 rounded-xl border text-[11px] cursor-pointer transition-all ${
+                        isCurr
+                          ? 'bg-[#d4af37] text-[#0f0f12] border-white font-extrabold shadow'
+                          : ph.status === 'completed'
+                          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                          : 'bg-[#0f0f12]/80 border-slate-800 text-slate-300 hover:border-[#d4af37]/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[9px] opacity-85">
+                        <span>{ph.monthsLabel}</span>
+                        <span>{isCurr ? '🟢 الآن' : ph.status === 'completed' ? '✓' : '⏳'}</span>
+                      </div>
+                      <div className="font-bold truncate mt-0.5">
+                        {ph.icon} {ph.shortTitle}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 4 Educational Stages Interactive Grid (#2: المراحل الأربع ببنوك أسئلة مستقلة) */}
+            <div className="mb-5 max-w-[600px] space-y-2">
+              <div className="text-xs font-extrabold text-[#d4af37] flex items-center justify-between">
+                <span>🎓 المراحل التعليمية الأربع (بنك أسئلة وزمن ومستوى صعوبة مستقل لكل مرحلة):</span>
+                <span className="text-[10px] text-emerald-400">ابتدائي صغير ≠ كبير ≠ إعدادي ≠ ثانوي</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {(
+                  [
+                    {
+                      stage: 'primary_lower' as EducationalStage,
+                      title: '🟢 ابتدائي صغير',
+                      grades: 'الأول · الثاني · الثالث',
+                      desc: 'أسئلة مصورة مبسطة · 45ث',
+                    },
+                    {
+                      stage: 'primary_upper' as EducationalStage,
+                      title: '🔵 ابتدائي كبير',
+                      grades: 'الرابع · الخامس · السادس',
+                      desc: 'ألغاز وتفكير منطقي · 35ث',
+                    },
+                    {
+                      stage: 'preparatory' as EducationalStage,
+                      title: '🟣 المرحلة الإعدادية',
+                      grades: 'الأول · الثاني · الثالث',
+                      desc: 'تحليل وعلوم وتاريخ · 30ث',
+                    },
+                    {
+                      stage: 'secondary' as EducationalStage,
+                      title: '🟠 المرحلة الثانوية',
+                      grades: 'الأول · الثاني · الثالث',
+                      desc: 'استنتاج متقدم وتفكير نقدي · 25ث',
+                    },
+                  ]
+                ).map((item) => {
+                  const meta = STAGE_METADATA[item.stage];
+                  const stgCount = nationalAggregated.stageBreakdown[item.stage]?.total || 0;
+                  return (
+                    <div
+                      key={item.stage}
+                      onClick={() => {
+                        soundEngine.playSelectTile();
+                        setCurrentView('qualifiers');
+                      }}
+                      className="p-3 rounded-xl bg-[#141A29] border hover:scale-[1.02] transition-all cursor-pointer space-y-1"
+                      style={{ borderColor: `${meta.badgeColor}66` }}
+                    >
+                      <div className="text-xs font-extrabold" style={{ color: meta.badgeColor }}>
+                        {item.title}
+                      </div>
+                      <div className="text-[10px] text-white font-bold">{item.grades}</div>
+                      <div className="text-[10px] text-slate-400">{item.desc}</div>
+                      <div className="text-[10px] text-amber-300 font-mono-num pt-0.5">
+                        👥 {stgCount} متسابق
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Dual Competition Mode Highlight: Individual + Team System */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7 max-w-[580px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 max-w-[600px]">
               <div
                 onClick={() => {
                   soundEngine.playSelectTile();
@@ -425,11 +665,11 @@ export default function App() {
                 className="p-4 rounded-xl bg-[#141A29] border border-emerald-400/50 hover:border-emerald-400 transition-all cursor-pointer space-y-1.5"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-emerald-400">👤 النظام الفردي (Individual)</span>
+                  <span className="text-xs font-extrabold text-emerald-400">👤 النظام الفردي والتصفيات</span>
                   <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">طالب مستقل</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  يدخل كل طالب بمفرده بكود مشاركته في التصفيات الفردية أو مواجهات (طالب ضد طالب 1v1) ويحصل على بطاقة العبقري.
+                  يسجل الطالب مدرسته وإدارته ومحافظته وصفه، ويحصل على كود مشاركة 🎫 ويخوض اختبار مرحلته الآلي.
                 </p>
               </div>
 
@@ -441,43 +681,24 @@ export default function App() {
                 className="p-4 rounded-xl bg-[#141A29] border border-amber-400/50 hover:border-amber-400 transition-all cursor-pointer space-y-1.5"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-extrabold text-amber-400">👥 نظام الفرق (Teams 4-5)</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">مجموعة أولاد</span>
+                  <span className="text-xs font-extrabold text-amber-400">👥 نظام الفرق والتصويت اللحظي</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">4 أو 5 لاعبين</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  مجموعة من الأولاد (٤ أو ٥ لاعبين) يكوّنون فريقاً باسم وشعار وقائد للتنافس الجماعي في استوديو العباقرة!
+                  تكوين فريق للمدرسة (٤ أو ٥ لاعبين) مع ميزة التصويت اللحظي وإجماع الفريق في استوديو العباقرة!
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={() => {
-                  soundEngine.playBuzzer();
-                  setSelectedGameTab('classic_board');
-                  setCurrentView('games_hub');
-                }}
-                className="btn btn-primary"
-              >
-                📺 استوديو برنامج العباقرة
-              </button>
-              <button
-                onClick={() => {
-                  soundEngine.playSelectTile();
-                  setCurrentView('teams');
-                }}
-                className="btn btn-secondary"
-              >
-                🧩 تكوين فريق (4 أو 5 لاعبين)
-              </button>
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={() => {
                   soundEngine.playSelectTile();
                   setCurrentView('qualifiers');
                 }}
-                className="btn btn-secondary"
+                className="btn btn-primary"
               >
-                🟢 التصفيات الفردية
+                📝 التسجيل وبدء المسابقة
               </button>
               <button
                 onClick={() => {
@@ -486,19 +707,41 @@ export default function App() {
                 }}
                 className="btn btn-secondary"
               >
-                🧠 جرّب تدريباً
+                🧠 جرّب المسابقة (١٠ أسئلة)
               </button>
               <button
-                onClick={() => setCurrentView('leaderboard')}
+                onClick={() => {
+                  soundEngine.playBuzzer();
+                  setSelectedGameTab('classic_board');
+                  setCurrentView('games_hub');
+                }}
                 className="btn btn-secondary"
               >
-                🏆 لوحة الأبطال
+                📺 استوديو وألعاب العباقرة (١٠ ألعاب)
               </button>
               <button
-                onClick={() => setCurrentView('awards')}
+                onClick={() => setCurrentView('national_rankings')}
                 className="btn btn-secondary"
               >
-                🏅 جوائز المسابقة
+                🇪🇬 الترتيب العام للجمهورية
+              </button>
+              <button
+                onClick={() => setCurrentView('schools_hub')}
+                className="btn btn-secondary"
+              >
+                🏫 المدارس المشاركة
+              </button>
+              <button
+                onClick={() => setCurrentView('egypt_map')}
+                className="btn btn-secondary"
+              >
+                🗺️ محافظات مصر (٢٧)
+              </button>
+              <button
+                onClick={() => setCurrentView('certificates')}
+                className="btn btn-secondary"
+              >
+                📜 الشهادات الرقمية
               </button>
             </div>
           </section>
@@ -642,6 +885,31 @@ export default function App() {
                 setToast(`تم إنشاء ${newTeam.name} (${newTeam.members.length} لاعبين) بنجاح!`);
                 setTimeout(() => setToast(null), 3500);
               }}
+            />
+          )}
+
+          {(currentView === 'annual_roadmap' ||
+            currentView === 'national_rankings' ||
+            currentView === 'schools_hub' ||
+            currentView === 'egypt_map' ||
+            currentView === 'seasons_archive' ||
+            currentView === 'certificates' ||
+            currentView === 'about_privacy') && (
+            <NationalPlatformHub
+              mode={currentView}
+              students={students}
+              settings={settings}
+              onUpdateSettings={setSettings}
+              registeredSchools={registeredSchools}
+              onRegisterSchool={(newSch) => {
+                setRegisteredSchools((prev) => [newSch, ...prev]);
+                setToast(`تم تسجيل ${newSch.name} (${newSch.governorate}) في المنصة الوطنية بنجاح!`);
+                setTimeout(() => setToast(null), 3500);
+              }}
+              seasonsArchive={seasonsArchive}
+              activeStudent={activeStudent}
+              onSelectStudent={(s) => setActiveStudent(s)}
+              onNavigate={(v) => setCurrentView(v)}
             />
           )}
 

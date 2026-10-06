@@ -41,6 +41,12 @@ import {
   GradeNumber,
 } from '../types/competition';
 import { JOURNEY_NODES } from '../data/challengesData';
+import {
+  STAGE_METADATA,
+  GRADE_LABELS,
+  SCHOOL_TYPE_LABELS,
+  resolveStageFromGrade,
+} from '../services/qualificationEngine';
 import { soundEngine } from '../utils/sound';
 import victoryTrophyImg from '../assets/images/victory_cup_trophy_1791274266991.jpg';
 
@@ -151,15 +157,18 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
     { label: '➗ الحساب والذكاء الرياضي', value: student.scores.math, color: '#38BDF8' },
   ];
 
+  const stg = student.stage || resolveStageFromGrade(student.grade);
+  const stgMeta = STAGE_METADATA[stg];
+
   return (
     <section className="max-w-4xl mx-auto space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4 no-print">
         <div>
           <span className="text-xs font-semibold text-amber-400">
-            🪪 البطاقة الرقمية التحفيزية لطلاب مدرسة عيون مصر
+            🪪 البطاقة الرقمية التحفيزية المعتمدة — مسابقة عباقرة عيون مصر للجمهورية
           </span>
           <h2 className="text-2xl font-bold text-white font-display mt-0.5">
-            بطاقة عبقري عيون مصر
+            بطاقة عبقري عيون مصر (لجميع مراحل ومدارس الجمهورية)
           </h2>
         </div>
 
@@ -174,14 +183,14 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
           >
             {allStudents.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({s.participationCode})
+                {s.name} ({s.participationCode}) — {s.governorate || s.region || 'القاهرة'}
               </option>
             ))}
           </select>
 
           <button
             onClick={() => window.print()}
-            className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5"
+            className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>طباعة البطاقة</span>
@@ -193,24 +202,42 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
       <div className="rounded-3xl bg-gradient-to-br from-[#162647] via-[#111C35] to-[#0B1120] border-2 border-amber-400/70 p-6 sm:p-8 shadow-2xl">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
           <div>
-            <div className="text-xs font-bold text-amber-400">
-              🏆 {student.schoolName || 'مدرسة عيون مصر للغات'} · بطاقة عبقري معتمدة
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-amber-400">
+                🏆 عباقرة عيون مصر · بطاقة عبقري معتمدة
+              </span>
+              <span
+                className="px-2.5 py-0.5 rounded-full text-[11px] font-bold border"
+                style={{
+                  borderColor: stgMeta.badgeColor,
+                  color: stgMeta.badgeColor,
+                  backgroundColor: `${stgMeta.badgeColor}18`,
+                }}
+              >
+                {stgMeta.label}
+              </span>
             </div>
-            <h3 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
+            <h3 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1.5">
               {student.name}
             </h3>
             <div className="text-xs text-slate-300 mt-1">
-              الصف {student.grade === '4' ? 'الرابع' : student.grade === '5' ? 'الخامس' : 'السادس'} الابتدائي · الفصل: {student.className} · كود المشاركة:{' '}
+              {GRADE_LABELS[student.grade] || `الصف ${student.grade}`} · الفصل: {student.className} · كود المشاركة:{' '}
               <span className="font-mono-num text-amber-300 font-bold">
                 {student.participationCode}
               </span>
             </div>
-            <div className="text-xs text-emerald-300 font-semibold mt-1.5 flex flex-wrap items-center gap-2">
-              <span>🏫 المدرسة: {student.schoolName || 'مدرسة عيون مصر للغات'}</span>
+            <div className="text-xs text-emerald-300 font-semibold mt-2 flex flex-wrap items-center gap-2">
+              <span>🏫 المدرسة: {student.schoolName || 'مدرسة عيون مصر الرسمية للغات'}</span>
+              {student.schoolType && (
+                <>
+                  <span>·</span>
+                  <span className="text-amber-300">({SCHOOL_TYPE_LABELS[student.schoolType]})</span>
+                </>
+              )}
               <span>·</span>
-              <span>📍 المنطقة: {student.region || 'القاهرة'}</span>
+              <span>🏛️ الإدارة: {student.administration || 'إدارة شرق مدينة نصر'}</span>
               <span>·</span>
-              <span>🌍 البلد: {student.country || 'مصر 🇪🇬'}</span>
+              <span>🗺️ المحافظة: {student.governorate || student.region || 'القاهرة'}</span>
             </div>
           </div>
 
@@ -218,6 +245,34 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
             <div className="text-xs text-slate-400">⭐ مجموع النقاط</div>
             <div className="text-3xl font-bold font-mono-num text-amber-400 mt-0.5">
               {student.scores.total}
+            </div>
+          </div>
+        </div>
+
+        {/* 4-Level National Ranking Strip (#13 & #15: المدرسة ← الإدارة ← المحافظة ← الجمهورية) */}
+        <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 rounded-xl bg-slate-950/90 border border-emerald-400/30 text-center">
+            <div className="text-[11px] text-slate-400">🏫 الترتيب داخل المدرسة</div>
+            <div className="text-lg font-extrabold font-mono-num text-emerald-400 mt-0.5">
+              #{student.schoolRank || 1}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950/90 border border-sky-400/30 text-center">
+            <div className="text-[11px] text-slate-400">🏛️ الترتيب في الإدارة</div>
+            <div className="text-lg font-extrabold font-mono-num text-sky-400 mt-0.5">
+              #{student.administrationRank || 1}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950/90 border border-purple-400/30 text-center">
+            <div className="text-[11px] text-slate-400">🗺️ الترتيب في المحافظة</div>
+            <div className="text-lg font-extrabold font-mono-num text-purple-400 mt-0.5">
+              #{student.governorateRank || 1}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950/90 border border-amber-400/40 text-center">
+            <div className="text-[11px] text-slate-400">🇪🇬 الترتيب على الجمهورية</div>
+            <div className="text-lg font-extrabold font-mono-num text-amber-400 mt-0.5">
+              #{student.republicRank || student.stageRank || 1}
             </div>
           </div>
         </div>
@@ -244,10 +299,13 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
 
         <div className="mt-6 pt-5 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="text-xs text-slate-300">
-            الأوسمة التشجيعية: <strong className="text-amber-400">{student.badges.join(' · ') || '🌟 عبقري واعد'}</strong>
+            الأوسمة والألقاب المحققة:{' '}
+            <strong className="text-amber-400">
+              {student.badges.join(' · ') || '🌟 عبقري واعد'}
+            </strong>
           </div>
           <div className="text-[11px] text-slate-400">
-            * هذه البطاقة وسام تحفيزي لاكتشاف مواهبك المتنوعة وتنمية قدراتك في رحلة العباقرة.
+            * مسابقة عباقرة عيون مصر — مسابقة الجمهورية للمعرفة والذكاء والتفكير
           </div>
         </div>
       </div>

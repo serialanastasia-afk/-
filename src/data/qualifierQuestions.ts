@@ -1,4 +1,4 @@
-import { QualifierQuestion, QualifierDomain } from '../types/competition';
+import { QualifierQuestion, QualifierDomain, EducationalStage } from '../types/competition';
 
 export const DOMAIN_META: Record<
   QualifierDomain,
@@ -1094,3 +1094,17 @@ export const STAGE_SPECIFIC_QUESTIONS: QualifierQuestion[] = [
     timeSeconds: 40,
   },
 ];
+
+export const ALL_STAGE_QUALIFIER_QUESTIONS: QualifierQuestion[] = [
+  ...STAGE_SPECIFIC_QUESTIONS,
+  ...QUALIFIER_50_QUESTIONS.map((q) => ({ ...q, stage: q.stage || ('primary_upper' as EducationalStage) })),
+];
+
+export function getPracticeQuestionsForStage(stage: EducationalStage): QualifierQuestion[] {
+  const stageSpecific = STAGE_SPECIFIC_QUESTIONS.filter((q) => q.stage === stage);
+  if (stage === 'primary_upper') {
+    return PRACTICE_10_QUESTIONS;
+  }
+  const combined = [...stageSpecific, ...PRACTICE_10_QUESTIONS.slice(0, Math.max(0, 10 - stageSpecific.length))];
+  return combined.slice(0, 10);
+}

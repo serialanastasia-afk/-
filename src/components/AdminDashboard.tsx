@@ -50,9 +50,10 @@ import {
   SeasonLifecycleStatus,
   EducationalStage,
   HierarchyLevel,
+  AnnualPhaseId,
 } from '../types/competition';
 import { DOMAIN_META } from '../data/qualifierQuestions';
-import { APP_PROFILE_PRESETS } from '../data/challengesData';
+import { APP_PROFILE_PRESETS, DEFAULT_ANNUAL_PHASES } from '../data/challengesData';
 import {
   STAGE_METADATA,
   GRADE_LABELS,
@@ -512,6 +513,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           <div className="text-[11px] text-slate-300 bg-slate-950/80 px-3.5 py-2 rounded-xl border border-slate-800">
             🤖 <strong className="text-amber-400">التشغيل الذاتي:</strong> التسجيل ← التوزيع ← الاختبار ← التصحيح ← الترتيب ← التأهل يتم تلقائياً 100%
+          </div>
+        </div>
+
+        {/* 📅 6-Phase Year-Round Qualifiers Quick Switcher for Supervisor */}
+        <div className="p-4 rounded-2xl bg-slate-950/85 border border-amber-400/35 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-extrabold text-amber-400">
+              📅 التحكم في مراحل وتصفيات السنة الـ٦ (اضغط على أي مرحلة لتفعيلها فوراً وتحديث التصفيات):
+            </span>
+            <span className="text-[11px] text-emerald-300">
+              سبتمبر ← أكتوبر ← نوفمبر ← ديسمبر ← يناير ← فبراير ← مارس ← أبريل ← مايو ← يونيو ← يوليو ← أغسطس
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {(settings.annualPhases && settings.annualPhases.length > 0
+              ? settings.annualPhases
+              : DEFAULT_ANNUAL_PHASES
+            ).map((ph) => {
+              const isCurr =
+                (settings.activeAnnualPhaseId || 'phase_2_administration') === ph.id;
+              return (
+                <button
+                  key={ph.id}
+                  type="button"
+                  onClick={() => {
+                    soundEngine.playFanfare();
+                    const allPhases =
+                      settings.annualPhases && settings.annualPhases.length > 0
+                        ? settings.annualPhases
+                        : DEFAULT_ANNUAL_PHASES;
+                    const updatedPhases = allPhases.map((item) => ({
+                      ...item,
+                      status: (item.order < ph.order
+                        ? 'completed'
+                        : item.order === ph.order
+                        ? 'active'
+                        : 'upcoming') as 'completed' | 'active' | 'upcoming',
+                    }));
+                    setSettings((prev) => ({
+                      ...prev,
+                      activeAnnualPhaseId: ph.id as AnnualPhaseId,
+                      currentHierarchyLevel: ph.targetLevel,
+                      questionsCountPerExam: ph.questionsCount,
+                      qualifierDurationMinutes: ph.durationMinutes,
+                      annualPhases: updatedPhases,
+                    }));
+                    appendAuditLog(
+                      'season_state_change',
+                      '👩‍💼 المشرفة العامة',
+                      `📅 تفعيل المرحلة السنوية: ${ph.title}`,
+                      `تم انتقال المسابقة إلى (${ph.shortTitle} — ${ph.monthsLabel}) وتحديث إعدادات التصفية (${ph.questionsCount} سؤالاً في ${ph.durationMinutes} دقيقة).`
+                    );
+                    notify(`📅 تم تفعيل «${ph.title} (${ph.monthsLabel})» بنجاح!`);
+                  }}
+                  className={`p-2.5 rounded-xl border text-right transition-all cursor-pointer ${
+                    isCurr
+                      ? 'bg-amber-400 text-slate-950 border-white font-extrabold shadow-lg scale-[1.02]'
+                      : ph.status === 'completed'
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200 hover:border-amber-400'
+                      : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-400/60'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span>{ph.monthsLabel}</span>
+                    <span>
+                      {isCurr ? '🟢 نشطة' : ph.status === 'completed' ? '✓ تمت' : '⏳'}
+                    </span>
+                  </div>
+                  <div className="text-xs font-bold mt-0.5 truncate">
+                    {ph.icon} {ph.shortTitle}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -1818,6 +1893,192 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 }
                 className="w-4 h-4 accent-amber-400"
               />
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-emerald-500/40 flex items-center justify-between">
+              <div>
+                <span className="font-bold text-emerald-300 block">
+                  🔒 وضع حماية خصوصية الطلاب والأطفال (#31)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  إظهار الاسم الأول والحرف الأول من اسم الأب (مثال: أحمد م.) في اللوحات العامة
+                </span>
+              </div>
+              <input
+                type="checkbox"
+                checked={Boolean(settings.privacyMaskNames)}
+                onChange={(e) =>
+                  setSettings({ ...settings, privacyMaskNames: e.target.checked })
+                }
+                className="w-4 h-4 accent-emerald-400"
+              />
+            </div>
+          </div>
+
+          {/* National School Composite Points Formula (#14 & #27) */}
+          <div className="p-5 rounded-2xl bg-slate-950/90 border border-amber-400/40 space-y-4">
+            <div>
+              <span className="text-xs font-bold text-amber-400">
+                🏫 معادلة احتساب نقاط وترتيب المدارس على مستوى الجمهورية (#14)
+              </span>
+              <h4 className="text-sm font-bold text-white mt-0.5">
+                النقاط المركبة للمدرسة = (مجموع نقاط الطلاب × معامل) + (المتوسط × معامل) + (بونص المتأهلين) + (بونص كل مشارك)
+              </h4>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <label className="block text-slate-400 mb-1">معامل مجموع نقاط الطلاب</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={settings.schoolScoringFormula?.totalPointsWeight ?? 1}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      schoolScoringFormula: {
+                        totalPointsWeight: Number(e.target.value),
+                        avgScoreWeight: settings.schoolScoringFormula?.avgScoreWeight ?? 2,
+                        qualifiedBonusPoints:
+                          settings.schoolScoringFormula?.qualifiedBonusPoints ?? 75,
+                        participantBonusPoints:
+                          settings.schoolScoringFormula?.participantBonusPoints ?? 15,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono-num"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <label className="block text-slate-400 mb-1">معامل متوسط درجات المدرسة</label>
+                <input
+                  type="number"
+                  step="0.5"
+                  value={settings.schoolScoringFormula?.avgScoreWeight ?? 2}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      schoolScoringFormula: {
+                        totalPointsWeight: settings.schoolScoringFormula?.totalPointsWeight ?? 1,
+                        avgScoreWeight: Number(e.target.value),
+                        qualifiedBonusPoints:
+                          settings.schoolScoringFormula?.qualifiedBonusPoints ?? 75,
+                        participantBonusPoints:
+                          settings.schoolScoringFormula?.participantBonusPoints ?? 15,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono-num"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <label className="block text-slate-400 mb-1">بونص كل طالب متأهل (نقطة)</label>
+                <input
+                  type="number"
+                  value={settings.schoolScoringFormula?.qualifiedBonusPoints ?? 75}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      schoolScoringFormula: {
+                        totalPointsWeight: settings.schoolScoringFormula?.totalPointsWeight ?? 1,
+                        avgScoreWeight: settings.schoolScoringFormula?.avgScoreWeight ?? 2,
+                        qualifiedBonusPoints: Number(e.target.value),
+                        participantBonusPoints:
+                          settings.schoolScoringFormula?.participantBonusPoints ?? 15,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono-num"
+                />
+              </div>
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
+                <label className="block text-slate-400 mb-1">بونص كل طالب مشارك (نقطة)</label>
+                <input
+                  type="number"
+                  value={settings.schoolScoringFormula?.participantBonusPoints ?? 15}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      schoolScoringFormula: {
+                        totalPointsWeight: settings.schoolScoringFormula?.totalPointsWeight ?? 1,
+                        avgScoreWeight: settings.schoolScoringFormula?.avgScoreWeight ?? 2,
+                        qualifiedBonusPoints:
+                          settings.schoolScoringFormula?.qualifiedBonusPoints ?? 75,
+                        participantBonusPoints: Number(e.target.value),
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-1.5 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono-num"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Enable / Disable Interactive Games (#12 & #27) */}
+          <div className="p-5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-400">
+                🎮 تفعيل أو إيقاف ألعاب وتحديات «عباقرة عيون مصر» (#27)
+              </span>
+              <span className="text-[11px] text-slate-400">
+                يمكن للمشرفة التحكم في الألعاب المتاحة للطلاب والفرق
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 text-xs">
+              {[
+                { id: 'falcon_eye', label: '🦅 عين الصقر' },
+                { id: 'lightning_speed', label: '⚡ سرعة البرق' },
+                { id: 'genius_mind', label: '🧠 مخ العباقرة' },
+                { id: 'mystery_fact', label: '🔍 المعلومة الغامضة' },
+                { id: 'risk_ladder', label: '🎲 تحدي المخاطرة' },
+                { id: 'point_heist', label: '🏴‍☠️ سرقة النقاط' },
+                { id: 'black_box', label: '📦 الصندوق الأسود' },
+                { id: 'no_words', label: '🙊 ممنوع الكلام' },
+                { id: 'egypt_minute', label: '🇪🇬 مصر في دقيقة' },
+                { id: 'genius_room', label: '🚪 غرفة العباقرة' },
+                { id: 'classic_board', label: '📺 لوحة العباقرة' },
+                { id: 'wheel_of_fortune', label: '🎡 عجلة الحظ' },
+              ].map((gm) => {
+                const isEnabled =
+                  !settings.enabledGames ||
+                  settings.enabledGames.includes(gm.id as any);
+                return (
+                  <label
+                    key={gm.id}
+                    className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                      isEnabled
+                        ? 'bg-slate-900 border-emerald-400/50 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-500'
+                    }`}
+                  >
+                    <span className="font-bold">{gm.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={isEnabled}
+                      onChange={(e) => {
+                        const current = settings.enabledGames || [
+                          'classic_board',
+                          'falcon_eye',
+                          'lightning_speed',
+                          'genius_mind',
+                          'mystery_fact',
+                          'risk_ladder',
+                          'point_heist',
+                          'black_box',
+                          'no_words',
+                          'egypt_minute',
+                          'genius_room',
+                          'wheel_of_fortune',
+                        ];
+                        const next = e.target.checked
+                          ? [...current, gm.id as any]
+                          : current.filter((x) => x !== gm.id);
+                        setSettings({ ...settings, enabledGames: next });
+                      }}
+                      className="accent-emerald-400"
+                    />
+                  </label>
+                );
+              })}
             </div>
           </div>
         </div>

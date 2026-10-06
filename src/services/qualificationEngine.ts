@@ -10,7 +10,88 @@ import {
   AuditLogEntry,
   SeasonLifecycleStatus,
   HierarchyLevel,
+  SchoolType,
+  SchoolScoringFormula,
 } from '../types/competition';
+
+// ============================================================================
+// 0. 🇪🇬 EGYPT'S 27 GOVERNORATES & SCHOOL TYPES METADATA
+// ============================================================================
+
+export const EGYPT_27_GOVERNORATES: {
+  name: string;
+  regionGroup: 'القاهرة الكبرى' | 'الإسكندرية والساحل' | 'الدلتا' | 'مدن القناة وسيناء' | 'صعيد مصر والوادي';
+  defaultAdministrations: string[];
+}[] = [
+  { name: 'القاهرة', regionGroup: 'القاهرة الكبرى', defaultAdministrations: ['إدارة المعادي التعليمية', 'إدارة مدينة نصر التعليمية', 'إدارة مصر الجديدة التعليمية', 'إدارة القاهرة الجديدة التعليمية', 'إدارة شبرا التعليمية'] },
+  { name: 'الجيزة', regionGroup: 'القاهرة الكبرى', defaultAdministrations: ['إدارة الدقي التعليمية', 'إدارة 6 أكتوبر التعليمية', 'إدارة الشيخ زايد التعليمية', 'إدارة الهرم التعليمية', 'إدارة العجوزة التعليمية'] },
+  { name: 'القليوبية', regionGroup: 'القاهرة الكبرى', defaultAdministrations: ['إدارة بنها التعليمية', 'إدارة العبور التعليمية', 'إدارة شبرا الخيمة التعليمية', 'إدارة قليوب التعليمية'] },
+  { name: 'الإسكندرية', regionGroup: 'الإسكندرية والساحل', defaultAdministrations: ['إدارة شرق الإسكندرية التعليمية', 'إدارة وسط الإسكندرية التعليمية', 'إدارة المنتزه التعليمية', 'إدارة برج العرب التعليمية', 'إدارة العجمي التعليمية'] },
+  { name: 'البحيرة', regionGroup: 'الإسكندرية والساحل', defaultAdministrations: ['إدارة دمنهور التعليمية', 'إدارة كفر الدوار التعليمية', 'إدارة رشيد التعليمية'] },
+  { name: 'مطروح', regionGroup: 'الإسكندرية والساحل', defaultAdministrations: ['إدارة مرسى مطروح التعليمية', 'إدارة العلمين التعليمية', 'إدارة الحمام التعليمية'] },
+  { name: 'الدقهلية', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة غرب المنصورة التعليمية', 'إدارة شرق المنصورة التعليمية', 'إدارة ميت غمر التعليمية', 'إدارة طلخا التعليمية'] },
+  { name: 'الغربية', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة طنطا التعليمية', 'إدارة المحلة الكبرى التعليمية', 'إدارة كفر الزيات التعليمية'] },
+  { name: 'الشرقية', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة الزقازيق التعليمية', 'إدارة العاشر من رمضان التعليمية', 'إدارة بلبيس التعليمية'] },
+  { name: 'المنوفية', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة شبين الكوم التعليمية', 'إدارة مدينة السادات التعليمية', 'إدارة منوف التعليمية'] },
+  { name: 'كفر الشيخ', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة كفر الشيخ التعليمية', 'إدارة دسوق التعليمية', 'إدارة بلطيم التعليمية'] },
+  { name: 'دمياط', regionGroup: 'الدلتا', defaultAdministrations: ['إدارة دمياط التعليمية', 'إدارة دمياط الجديدة التعليمية', 'إدارة فارسكور التعليمية'] },
+  { name: 'بورسعيد', regionGroup: 'مدن القناة وسيناء', defaultAdministrations: ['إدارة شرق بورسعيد التعليمية', 'إدارة شمال بورسعيد التعليمية', 'إدارة بورفؤاد التعليمية'] },
+  { name: 'الإسماعيلية', regionGroup: 'مدن القناة وسيناء', defaultAdministrations: ['إدارة شمال الإسماعيلية التعليمية', 'إدارة جنوب الإسماعيلية التعليمية', 'إدارة القنطرة التعليمية'] },
+  { name: 'السويس', regionGroup: 'مدن القناة وسيناء', defaultAdministrations: ['إدارة شمال السويس التعليمية', 'إدارة جنوب السويس التعليمية', 'إدارة عتاقة التعليمية'] },
+  { name: 'شمال سيناء', regionGroup: 'مدن القناة وسيناء', defaultAdministrations: ['إدارة العريش التعليمية', 'إدارة بئر العبد التعليمية'] },
+  { name: 'جنوب سيناء', regionGroup: 'مدن القناة وسيناء', defaultAdministrations: ['إدارة طور سيناء التعليمية', 'إدارة شرم الشيخ التعليمية', 'إدارة دهب التعليمية'] },
+  { name: 'الفيوم', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة غرب الفيوم التعليمية', 'إدارة شرق الفيوم التعليمية', 'إدارة سنورس التعليمية'] },
+  { name: 'بني سويف', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة بني سويف التعليمية', 'إدارة الواسطى التعليمية'] },
+  { name: 'المنيا', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة المنيا التعليمية', 'إدارة ملوي التعليمية', 'إدارة مغاغة التعليمية'] },
+  { name: 'أسيوط', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة أسيوط التعليمية', 'إدارة ديروط التعليمية', 'إدارة منفلوط التعليمية'] },
+  { name: 'سوهاج', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة سوهاج التعليمية', 'إدارة أخميم التعليمية', 'إدارة طهطا التعليمية'] },
+  { name: 'قنا', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة قنا التعليمية', 'إدارة نجع حمادي التعليمية', 'إدارة قوص التعليمية'] },
+  { name: 'الأقصر', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة الأقصر التعليمية', 'إدارة إسنا التعليمية', 'إدارة القرنة التعليمية'] },
+  { name: 'أسوان', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة أسوان التعليمية', 'إدارة إدفو التعليمية', 'إدارة كوم أمبو التعليمية'] },
+  { name: 'البحر الأحمر', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة الغردقة التعليمية', 'إدارة سفاجا التعليمية', 'إدارة القصير التعليمية'] },
+  { name: 'الوادي الجديد', regionGroup: 'صعيد مصر والوادي', defaultAdministrations: ['إدارة الخارجة التعليمية', 'إدارة الداخلة التعليمية'] },
+];
+
+export const SCHOOL_TYPE_LABELS: Record<SchoolType, string> = {
+  official_arabic: 'حكومي عربي',
+  official_languages: 'رسمي لغات / متميز لغات',
+  private_arabic: 'خاص عربي',
+  private_languages: 'خاص لغات',
+  international: 'دولي (International)',
+  stem_feweq: 'مدارس المتفوقين (STEM)',
+  azhari: 'معهد أزهري',
+};
+
+export const NATIONAL_BADGE_CATALOG: { id: string; badge: string; desc: string }[] = [
+  { id: 'nb-1', badge: '🏅 أول مشاركة', desc: 'يُمنح تلقائياً عند إتمام التسجيل وخوض أول جولة في المسابقة' },
+  { id: 'nb-2', badge: '🧠 عبقري المنطق', desc: 'تحقيق 85% فأكثر في أسئلة التفكير المنطقي والاستنتاج' },
+  { id: 'nb-3', badge: '🔬 عالم صغير', desc: 'التفوق في أسئلة العلوم والابتكار والطبيعة' },
+  { id: 'nb-4', badge: '➗ ملك الحساب', desc: 'إتقان الحساب الذهني والرياضيات السريعة' },
+  { id: 'nb-5', badge: '📚 فارس اللغة', desc: 'التميز في اللغة العربية والمفردات والبلاغة' },
+  { id: 'nb-6', badge: '👁️ عين الصقر', desc: 'قوة الملاحظة البصرية واكتشاف الأنماط والاختلافات' },
+  { id: 'nb-7', badge: '⚡ أسرع بديهة', desc: 'الإجابة الصحيحة السريعة بمعدل سرعة يفوق 90%' },
+  { id: 'nb-8', badge: '🎯 خبير المخاطرة', desc: 'النجاح في تحديات المخاطرة والكروت الاستراتيجية' },
+  { id: 'nb-9', badge: '🏆 بطل المحافظة', desc: 'تصدر ترتيب المرحلة التعليمية على مستوى المحافظة' },
+  { id: 'nb-10', badge: '🇪🇬 بطل الجمهورية', desc: 'الوصول إلى المراكز الثلاثة الأولى على مستوى الجمهورية في مرحلته' },
+];
+
+/**
+ * Formats student name for public leaderboards according to Child Privacy Settings (#23).
+ * Never exposes phone numbers or personal data publicly.
+ */
+export function formatStudentPublicName(
+  fullName: string,
+  privacyMode: 'full_name' | 'abbreviated_name' = 'full_name'
+): string {
+  if (!fullName) return 'متسابق';
+  if (privacyMode !== 'abbreviated_name') return fullName;
+  const parts = fullName.trim().split(/\s+/);
+  if (parts.length <= 1) return fullName;
+  const first = parts[0];
+  const secondInitial = parts[1] ? `${parts[1].charAt(0)}.` : '';
+  const thirdInitial = parts[2] ? ` ${parts[2].charAt(0)}.` : '';
+  return `${first} ${secondInitial}${thirdInitial}`;
+}
 
 // ============================================================================
 // 1. 🏫 STAGE & GRADE AUTO-GROUPING ENGINE (محرك توزيع المراحل والصفوف تلقائياً)
@@ -418,11 +499,28 @@ export function runAutomatedRankingAndQualification(
       ? 'republic'
       : settings.currentHierarchyLevel || 'school';
 
+  // Track counters per school, administration, and governorate WITHIN the student's stage
+  const schoolStageCounters = new Map<string, number>();
+  const adminStageCounters = new Map<string, number>();
+  const govStageCounters = new Map<string, number>();
+
   const rankedStudents = sortedGlobal.map((stu, globalIdx) => {
     const stg = stu.stage || resolveStageFromGrade(stu.grade);
     stageCounters[stg] = (stageCounters[stg] || 0) + 1;
     const stageRank = stageCounters[stg];
     const stageQuota = quotas[stg] || 100;
+
+    const schoolKey = `${stg}::${stu.schoolName || 'مدرسة'}`;
+    const adminKey = `${stg}::${stu.administration || 'إدارة'}`;
+    const govKey = `${stg}::${stu.governorate || stu.region || 'محافظة'}`;
+
+    schoolStageCounters.set(schoolKey, (schoolStageCounters.get(schoolKey) || 0) + 1);
+    adminStageCounters.set(adminKey, (adminStageCounters.get(adminKey) || 0) + 1);
+    govStageCounters.set(govKey, (govStageCounters.get(govKey) || 0) + 1);
+
+    const schoolRank = schoolStageCounters.get(schoolKey)!;
+    const administrationRank = adminStageCounters.get(adminKey)!;
+    const governorateRank = govStageCounters.get(govKey)!;
 
     // Qualified if completed qualifier, within stage quota, and score >= minimum threshold (e.g., 250)
     const isQualified =
@@ -445,7 +543,7 @@ export function runAutomatedRankingAndQualification(
         studentId: stu.id,
         studentName: `${stu.name} ⚖️ ${prevStu.name}`,
         participationCode: `${stu.participationCode} / ${prevStu.participationCode}`,
-        schoolName: stu.schoolName || 'مدرسة عيون مصر للغات',
+        schoolName: stu.schoolName || 'مدرسة مشاركة',
         governorate: stu.governorate || stu.region || 'القاهرة',
         stage: stg,
         description: `تعادل تام في النقاط (${stu.scores.total} نقطة) والزمن داخل مرحلة (${STAGE_METADATA[stg].shortLabel}). جاهز لتفعيل سؤال فاصل إلكتروني تلقائي.`,
@@ -456,14 +554,29 @@ export function runAutomatedRankingAndQualification(
 
     const nextInfo = nextLevelMap[currentLevel];
 
+    // Add automatic national/governorate badges if top ranked
+    const updatedBadges = new Set(stu.badges || []);
+    updatedBadges.add('🏅 أول مشاركة');
+    if (governorateRank === 1 && stu.scores.total >= 350) {
+      updatedBadges.add('🏆 بطل المحافظة');
+    }
+    if (stageRank <= 3 && stu.scores.total >= 400) {
+      updatedBadges.add('🇪🇬 بطل الجمهورية');
+    }
+
     return {
       ...stu,
       stage: stg,
       autoRank: globalIdx + 1,
       stageRank,
+      republicStageRank: stageRank,
+      schoolRank,
+      administrationRank,
+      governorateRank,
       qualifiedForFinals: isQualified,
       qualifiedLevel: isQualified ? nextInfo.nextLevel : 'none',
       tieBreakerNeeded: isExactTie,
+      badges: Array.from(updatedBadges),
       nextRoundInfo: isQualified
         ? {
             roundTitle:
@@ -491,14 +604,24 @@ export function runAutomatedRankingAndQualification(
 export interface EntityRankingSummary {
   name: string;
   subLabel: string;
+  governorate: string;
+  administration: string;
+  stagesPresent: EducationalStage[];
   participantsCount: number;
   completedCount: number;
   qualifiedCount: number;
+  topThreeCount: number;
   avgScore: number;
   topScore: number;
+  compositePoints: number; // نقاط الترتيب الموزونة (لا تعتمد على الكثرة العددية وحدها)
+  topStudentName: string;
+  topSchoolName?: string;
 }
 
-export function computeAggregatedRankings(students: StudentProfile[]): {
+export function computeAggregatedRankings(
+  students: StudentProfile[],
+  formula?: SchoolScoringFormula
+): {
   topSchools: EntityRankingSummary[];
   topAdministrations: EntityRankingSummary[];
   topGovernorates: EntityRankingSummary[];
@@ -507,6 +630,14 @@ export function computeAggregatedRankings(students: StudentProfile[]): {
     { total: number; completed: number; qualified: number; avgScore: number }
   >;
 } {
+  const activeFormula: SchoolScoringFormula = formula || {
+    avgStudentPointsWeight: 1.5,
+    qualifiedStudentsBonus: 45,
+    topThreePodiumBonus: 85,
+    teamWinsBonus: 35,
+    maxParticipationCapBonus: 90,
+  };
+
   const schoolMap = new Map<string, StudentProfile[]>();
   const adminMap = new Map<string, StudentProfile[]>();
   const govMap = new Map<string, StudentProfile[]>();
@@ -524,7 +655,7 @@ export function computeAggregatedRankings(students: StudentProfile[]): {
   students.forEach((s) => {
     const school = s.schoolName || 'مدرسة مشاركة';
     const admin = s.administration || 'إدارة تعليمية';
-    const gov = s.governorate || s.region || 'محافظة مشاركة';
+    const gov = s.governorate || s.region || 'القاهرة';
     const stg = s.stage || resolveStageFromGrade(s.grade);
 
     if (!schoolMap.has(school)) schoolMap.set(school, []);
@@ -555,32 +686,63 @@ export function computeAggregatedRankings(students: StudentProfile[]): {
     map.forEach((stuList, name) => {
       const completed = stuList.filter((s) => s.completedQualifier);
       const qualified = stuList.filter((s) => s.qualifiedForFinals);
+      const topThree = stuList.filter((s) => (s.stageRank || 99) <= 3);
       const totalPts = stuList.reduce((acc, s) => acc + s.scores.total, 0);
       const avgScore = stuList.length > 0 ? Math.round(totalPts / stuList.length) : 0;
-      const topScore = stuList.reduce((max, s) => Math.max(max, s.scores.total), 0);
+      const sortedByScore = [...stuList].sort((a, b) => b.scores.total - a.scores.total);
+      const bestStudent = sortedByScore[0];
+      const topScore = bestStudent?.scores.total || 0;
+      const stagesPresent = Array.from(
+        new Set(stuList.map((s) => s.stage || resolveStageFromGrade(s.grade)))
+      );
+
+      // Composite formula: rewards average quality + qualified students + podium winners, with capped participation bonus
+      const cappedParticipationBonus = Math.min(
+        activeFormula.maxParticipationCapBonus,
+        stuList.length * 18
+      );
+      const compositePoints = Math.round(
+        avgScore * activeFormula.avgStudentPointsWeight +
+          qualified.length * activeFormula.qualifiedStudentsBonus +
+          topThree.length * activeFormula.topThreePodiumBonus +
+          cappedParticipationBonus
+      );
+
       list.push({
         name,
         subLabel: getSubLabel(stuList),
+        governorate: stuList[0]?.governorate || stuList[0]?.region || 'القاهرة',
+        administration: stuList[0]?.administration || 'إدارة تعليمية',
+        stagesPresent,
         participantsCount: stuList.length,
         completedCount: completed.length,
         qualifiedCount: qualified.length,
+        topThreeCount: topThree.length,
         avgScore,
         topScore,
+        compositePoints,
+        topStudentName: bestStudent?.name || '—',
+        topSchoolName: bestStudent?.schoolName || '—',
       });
     });
-    return list.sort((a, b) => b.avgScore - a.avgScore || b.qualifiedCount - a.qualifiedCount);
+    return list.sort(
+      (a, b) => b.compositePoints - a.compositePoints || b.avgScore - a.avgScore
+    );
   };
 
   return {
     topSchools: buildSummary(
       schoolMap,
-      (l) => `${l[0]?.administration || 'إدارة المعادي'} · ${l[0]?.governorate || l[0]?.region || 'القاهرة'}`
+      (l) => `${l[0]?.administration || 'إدارة تعليمية'} · محافظة ${l[0]?.governorate || l[0]?.region || 'القاهرة'}`
     ),
     topAdministrations: buildSummary(
       adminMap,
       (l) => `محافظة ${l[0]?.governorate || l[0]?.region || 'القاهرة'}`
     ),
-    topGovernorates: buildSummary(govMap, (l) => `${l[0]?.country || 'مصر 🇪🇬'}`),
+    topGovernorates: buildSummary(
+      govMap,
+      (l) => `${new Set(l.map((x) => x.schoolName)).size} مدارس مشاركة · جمهورية مصر العربية 🇪🇬`
+    ),
     stageBreakdown,
   };
 }

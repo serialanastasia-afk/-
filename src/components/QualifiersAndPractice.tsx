@@ -19,11 +19,19 @@ import {
   CompetitionSettings,
   QualifierDomain,
   EducationalStage,
+  SchoolType,
 } from '../types/competition';
-import { DOMAIN_META, QUALIFIER_50_QUESTIONS, PRACTICE_10_QUESTIONS } from '../data/qualifierQuestions';
+import {
+  DOMAIN_META,
+  ALL_STAGE_QUALIFIER_QUESTIONS,
+  getPracticeQuestionsForStage,
+} from '../data/qualifierQuestions';
+import { DEFAULT_ANNUAL_PHASES } from '../data/challengesData';
 import {
   STAGE_METADATA,
   GRADE_LABELS,
+  EGYPT_27_GOVERNORATES,
+  SCHOOL_TYPE_LABELS,
   resolveStageFromGrade,
   buildStudentGroupingPath,
   generateBalancedStudentExam,
@@ -58,17 +66,19 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   const [studentName, setStudentName] = useState('');
   const [grade, setGrade] = useState<GradeNumber>('5');
   const [className, setClassName] = useState('5 / أ');
-  const [governorate, setGovernorate] = useState(settings.defaultRegion || '');
+  const [governorate, setGovernorate] = useState(settings.defaultRegion || 'القاهرة');
   const [administration, setAdministration] = useState(
-    settings.defaultAdministration || ''
+    settings.defaultAdministration || 'إدارة المعادي التعليمية'
   );
   const [schoolName, setSchoolName] = useState(
     settings.defaultSchoolName || ''
   );
+  const [schoolType, setSchoolType] = useState<SchoolType>('official_languages');
   const [country, setCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
   const [codeInput, setCodeInput] = useState('');
   const [generatedTicketCode, setGeneratedTicketCode] = useState<string | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [practiceStage, setPracticeStage] = useState<EducationalStage>('primary_upper');
 
   // Exam State
   const [examStarted, setExamStarted] = useState(false);
@@ -86,15 +96,15 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   // Practice immediate feedback
   const [practiceFeedbackIdx, setPracticeFeedbackIdx] = useState<number | null>(null);
 
-  const rawPool: QualifierQuestion[] = [...customQuestions, ...QUALIFIER_50_QUESTIONS];
+  const rawPool: QualifierQuestion[] = [...customQuestions, ...ALL_STAGE_QUALIFIER_QUESTIONS];
 
   const baseList: QualifierQuestion[] = React.useMemo(() => {
-    if (mode === 'practice') return PRACTICE_10_QUESTIONS;
+    if (mode === 'practice') return getPracticeQuestionsForStage(practiceStage);
     if (activeStudent) {
       return generateBalancedStudentExam(rawPool, activeStudent, settings);
     }
     return rawPool.slice(0, settings.questionsCountPerExam || 50);
-  }, [mode, activeStudent?.id, activeStudent?.participationCode, customQuestions.length, settings.questionsCountPerExam, settings.randomizeQuestionsOrder, settings.randomizeOptionsOrder]);
+  }, [mode, practiceStage, activeStudent?.id, activeStudent?.participationCode, customQuestions.length, settings.questionsCountPerExam, settings.randomizeQuestionsOrder, settings.randomizeOptionsOrder]);
 
   const questionList: QualifierQuestion[] =
     selectedDomainFilter === 'ALL'
@@ -173,9 +183,10 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
       stage,
       className: className.trim() || `${grade} / أ`,
       schoolName: schoolName.trim() || 'مدرستي',
+      schoolType,
       administration: administration.trim() || 'الإدارة التعليمية',
-      governorate: governorate.trim() || 'المحافظة',
-      region: governorate.trim() || 'المحافظة',
+      governorate: governorate.trim() || 'القاهرة',
+      region: governorate.trim() || 'القاهرة',
       country: country.trim() || 'مصر 🇪🇬',
       participationCode: cleanCode,
       attemptsUsed: 0,
@@ -193,7 +204,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         technology: 0,
       },
       qualifiedForFinals: false,
-      badges: [],
+      badges: ['🏅 أول مشاركة'],
     };
 
     onRegisterStudent(newStu);
@@ -266,69 +277,212 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
       settings
     );
 
-    setActiveStudent(gradedStudent);
-    onCompleteQualifier(gradedStudent.id, gradedStudent);
+    const activePhaseId = settings.activeAnnualPhaseId || 'phase_2_administration';
+    const enrichedStudent: StudentProfile = {
+      ...gradedStudent,
+      currentAnnualPhaseReached: activePhaseId,
+      annualPhaseScores: {
+        ...(gradedStudent.annualPhaseScores || {}),
+        [activePhaseId]: gradedStudent.scores.total,
+      },
+    };
+
+    setActiveStudent(enrichedStudent);
+    onCompleteQualifier(enrichedStudent.id, enrichedStudent);
   };
 
-  // ==================== PRACTICE MODE VIEW ====================
+  // ==================== PRACTICE MODE VIEW (#26 & #28: 10 Stage-Specific Practice Questions) ====================
   if (mode === 'practice' && !examStarted && !examFinished) {
     return (
-      <div className="max-w-3xl mx-auto rounded-2xl bg-[#131F38] border border-slate-800 p-6 sm:p-8 text-center">
-        <div className="text-xs font-semibold text-amber-400 mb-2">
-          🧪 وضع التدريب التجريبي · ١٠ أسئلة متنوعة
+      <div className="max-w-4xl mx-auto rounded-3xl bg-[#131F38] border border-amber-400/40 p-6 sm:p-8 text-center space-y-6 shadow-2xl">
+        <div>
+          <div className="text-xs font-extrabold text-amber-400 mb-2">
+            🎮 تجربة مجانية · ١٠ أسئلة تدريبية مخصصة حسب مرحلتك التعليمية
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
+            اختر مرحلتك التعليمية وابدأ التدريب التجريبي الآن
+          </h2>
+          <p className="text-sm text-slate-300 mt-2 max-w-2xl mx-auto leading-relaxed">
+            تختلف الأسئلة الـ١٠ حسب مرحلتك العمرية (ابتدائي صغير، ابتدائي كبير، إعدادي، أو ثانوي). هذه الجولة التجريبية لا تدخل في النتائج الرسمية وتهدف لتعريفك بطريقة المنافسة في «عباقرة عيون مصر».
+          </p>
         </div>
-        <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
-          جرّب قبل البطولة — تدريب العباقرة
-        </h2>
-        <p className="text-sm text-slate-300 mt-2 max-w-xl mx-auto leading-relaxed">
-          يحتوي هذا التدريب على ١٠ أسئلة تجريبية متنوعة (علوم، حساب ذهني، ملاحظة بصرية، معلومة جديدة، ومنطق). هذه الأسئلة لا تدخل في النتائج الرسمية، والغرض منها التعرف على طريقة اللعب قبل التصفيات.
-        </p>
 
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-slate-300">
-          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div className="font-bold text-amber-400 font-mono-num text-base">10</div>
-            <div>أسئلة تجريبية</div>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div className="font-bold text-emerald-400 font-mono-num text-base">فوري</div>
-            <div>تصحيح وشرح مباشر</div>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div className="font-bold text-sky-400 font-mono-num text-base">8 مجالات</div>
-            <div>معرفة وتفكير وملاحظة</div>
-          </div>
-          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800">
-            <div className="font-bold text-purple-400 font-mono-num text-base">مفتوح</div>
-            <div>تدرّب في أي وقت</div>
-          </div>
+        {/* 4 Stage Selector Cards (#26) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-right">
+          {(
+            [
+              { id: 'primary_lower', icon: '🟢', title: 'ابتدائي صغير', sub: 'الصفوف ١ - ٣ ابتدائي (ملاحظة وحساب بسيط)' },
+              { id: 'primary_upper', icon: '🔵', title: 'ابتدائي كبير', sub: 'الصفوف ٤ - ٦ ابتدائي (علوم ومنطق وثقافة)' },
+              { id: 'preparatory', icon: '🟣', title: 'المرحلة الإعدادية', sub: 'الصفوف ١ع - ٣ع (استنتاج وتكنولوجيا وجبر)' },
+              { id: 'secondary', icon: '🟠', title: 'المرحلة الثانوية', sub: 'الصفوف ١ث - ٣ث (تفكير نقدي وحل مشكلات)' },
+            ] as { id: EducationalStage; icon: string; title: string; sub: string }[]
+          ).map((st) => {
+            const isSelected = practiceStage === st.id;
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setPracticeStage(st.id);
+                }}
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                  isSelected
+                    ? 'bg-amber-400/20 border-2 border-amber-400 shadow-lg scale-[1.02]'
+                    : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xl">{st.icon}</span>
+                  {isSelected && (
+                    <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-extrabold">
+                      ✓ مختارة
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <div className="text-sm font-extrabold text-white font-display">{st.title}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5 leading-snug">{st.sub}</div>
+                </div>
+              </button>
+            );
+          })}
         </div>
 
         <button
           onClick={handleStartExamNow}
-          className="mt-8 px-8 py-3.5 text-sm font-bold bg-amber-400 text-slate-950 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2"
+          className="px-8 py-3.5 text-sm font-extrabold bg-amber-400 text-slate-950 rounded-xl hover:bg-amber-300 transition-colors inline-flex items-center gap-2 cursor-pointer shadow-lg"
         >
           <Play className="w-4 h-4" />
-          <span>ابدأ الأسئلة التجريبية الـ١٠ الآن</span>
+          <span>
+            ابدأ الـ١٠ أسئلة التجريبية لمرحلة ({STAGE_METADATA[practiceStage].shortLabel}) الآن
+          </span>
         </button>
       </div>
     );
   }
 
-  // ==================== REGISTRATION / LOGIN FOR OFFICIAL QUALIFIER ====================
+  // ==================== REGISTRATION / LOGIN FOR OFFICIAL QUALIFIER (#3, #4, #5, #26) ====================
   if (mode === 'qualifier' && !examStarted && !examFinished) {
+    const annualPhases =
+      settings.annualPhases && settings.annualPhases.length > 0
+        ? settings.annualPhases
+        : DEFAULT_ANNUAL_PHASES;
+    const activeAnnualPhase =
+      annualPhases.find((p) => p.id === (settings.activeAnnualPhaseId || 'phase_2_administration')) ||
+      annualPhases[1] ||
+      annualPhases[0];
+
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="space-y-6">
+        {/* Year-Round Multi-Stage Qualifiers Banner */}
+        <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-l from-[#18294D] via-[#131F38] to-[#0D1527] border-2 border-amber-400/60 space-y-4 shadow-xl">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-3 py-0.5 rounded-full bg-amber-400 text-slate-950 text-[11px] font-extrabold">
+                  📅 نظام المراحل والتصفيات الممتدة على مدار السنة (٦ مراحل)
+                </span>
+                <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[11px] font-bold">
+                  المرحلة الجارية الآن ({activeAnnualPhase.monthsLabel})
+                </span>
+              </div>
+              <h3 className="text-lg sm:text-xl font-extrabold text-white font-display mt-1.5">
+                {activeAnnualPhase.icon} {activeAnnualPhase.title}
+              </h3>
+              <p className="text-xs text-slate-300 mt-0.5">
+                {activeAnnualPhase.qualificationRule}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onNavigateView('annual_roadmap')}
+              className="px-4 py-2.5 rounded-xl bg-slate-950 border border-amber-400/60 text-amber-300 hover:bg-amber-400 hover:text-slate-950 text-xs font-extrabold transition-colors cursor-pointer shrink-0"
+            >
+              📅 عرض خريطة مراحل وتصفيات السنة الكاملة ←
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {annualPhases.map((ph) => {
+              const isCurr = ph.id === activeAnnualPhase.id;
+              return (
+                <div
+                  key={ph.id}
+                  onClick={() => onNavigateView('annual_roadmap')}
+                  className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-all ${
+                    isCurr
+                      ? 'bg-amber-400 text-slate-950 border-white font-extrabold shadow'
+                      : ph.status === 'completed'
+                      ? 'bg-emerald-950/35 border-emerald-500/40 text-emerald-300'
+                      : 'bg-slate-950/80 border-slate-800 text-slate-400'
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span>{ph.monthsLabel}</span>
+                    <span>
+                      {ph.status === 'completed' ? '✓' : isCurr ? '🟢 الآن' : '⏳'}
+                    </span>
+                  </div>
+                  <div className="font-bold mt-0.5 truncate">
+                    {ph.icon} {ph.shortTitle}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Registration Form */}
         <div className="lg:col-span-6 rounded-2xl bg-[#131F38] border border-slate-800 p-6 sm:p-8">
-          <div className="text-xs font-semibold text-emerald-400 mb-1">
-            🟢 المرحلة الأولى: التصفيات الفردية الأونلاين
+          <div className="text-xs font-extrabold text-emerald-400 mb-1">
+            📝 التسجيل في عباقرة عيون مصر · مسابقة مفتوحة لجميع مدارس الجمهورية
           </div>
           <h2 className="text-2xl font-bold text-white font-display">
-            تسجيل بيانات العبقري واستخراج كود المشاركة
+            اختر مرحلتك وسجّل بيانات مدرستك لاستخراج كود المشاركة 🎫
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            أدخل البيانات المدرسية الأساسية فقط للحصول على تذكرة وكود الدخول للاختبار الفردي (٥٠ سؤالاً في ٣٠ دقيقة).
+            يرتبط كل طالب تلقائياً بمساره الوطني: (الطالب ← المدرسة ← الإدارة التعليمية ← المحافظة ← المرحلة التعليمية) دون جمع أي بيانات شخصية حساسة.
           </p>
+
+          {/* Quick Stage Selector Strip (#26) */}
+          <div className="mt-4 p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
+            <div className="text-[11px] font-bold text-amber-300">
+              ١. اختر مرحلتك التعليمية (أو اختر الصف بالأسفل ليحدد النظام مستواك تلقائياً):
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {(
+                [
+                  { id: 'primary_lower', label: '🟢 ابتدائي صغير', defaultGrade: '2' as GradeNumber },
+                  { id: 'primary_upper', label: '🔵 ابتدائي كبير', defaultGrade: '5' as GradeNumber },
+                  { id: 'preparatory', label: '🟣 إعدادي', defaultGrade: '8' as GradeNumber },
+                  { id: 'secondary', label: '🟠 ثانوي', defaultGrade: '11' as GradeNumber },
+                ] as const
+              ).map((st) => {
+                const isCurr = autoDetectedStage === st.id;
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    onClick={() => {
+                      soundEngine.playSelectTile();
+                      setGrade(st.defaultGrade);
+                      setClassName(`${st.defaultGrade} / أ`);
+                    }}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                      isCurr
+                        ? 'bg-amber-400 text-slate-950 border-amber-300 shadow'
+                        : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
           {loginError && (
             <div className="mt-4 p-3.5 rounded-xl bg-rose-500/20 border border-rose-400 text-rose-200 text-xs flex items-center gap-2">
@@ -397,27 +551,37 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
               </div>
             </div>
 
-            {/* Governorate, Educational Administration, School Name & Country Fields */}
+            {/* Governorate, Educational Administration, School Name & School Type Fields (#3 & #4) */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-slate-950/70 border border-slate-800">
               <div>
-                <label className="block text-xs text-amber-300 font-bold mb-1">🗺️ المحافظة / المنطقة *</label>
-                <input
-                  required
-                  type="text"
+                <label className="block text-xs text-amber-300 font-bold mb-1">🗺️ المحافظة (٢٧ محافظة) *</label>
+                <select
                   value={governorate}
-                  onChange={(e) => setGovernorate(e.target.value)}
-                  placeholder="اكتب اسم المحافظة أو المنطقة..."
+                  onChange={(e) => {
+                    const g = e.target.value;
+                    setGovernorate(g);
+                    const foundGov = EGYPT_27_GOVERNORATES.find((item) => item.name === g);
+                    if (foundGov && foundGov.defaultAdministrations[0]) {
+                      setAdministration(foundGov.defaultAdministrations[0]);
+                    }
+                  }}
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
-                />
+                >
+                  {EGYPT_27_GOVERNORATES.map((g) => (
+                    <option key={g.name} value={g.name}>
+                      محافظة {g.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-xs text-amber-300 font-bold mb-1">📍 الإدارة التعليمية *</label>
+                <label className="block text-xs text-amber-300 font-bold mb-1">📍 المنطقة / الإدارة التعليمية *</label>
                 <input
                   required
                   type="text"
                   value={administration}
                   onChange={(e) => setAdministration(e.target.value)}
-                  placeholder="اكتب اسم الإدارة التعليمية..."
+                  placeholder="مثال: إدارة شرق التعليمية..."
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
                 />
               </div>
@@ -428,20 +592,23 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                   type="text"
                   value={schoolName}
                   onChange={(e) => setSchoolName(e.target.value)}
-                  placeholder="اكتب اسم مدرستك..."
+                  placeholder="اكتب اسم مدرستك في محافظتك..."
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-xs text-amber-300 font-bold mb-1">🌍 البلد *</label>
-                <input
-                  required
-                  type="text"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  placeholder="اكتب اسم البلد..."
+                <label className="block text-xs text-amber-300 font-bold mb-1">🏷️ نوع المدرسة *</label>
+                <select
+                  value={schoolType}
+                  onChange={(e) => setSchoolType(e.target.value as SchoolType)}
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white focus:border-amber-400 focus:outline-none"
-                />
+                >
+                  {(Object.keys(SCHOOL_TYPE_LABELS) as SchoolType[]).map((stKey) => (
+                    <option key={stKey} value={stKey}>
+                      {SCHOOL_TYPE_LABELS[stKey]}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -599,6 +766,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
             </div>
           </div>
         </div>
+      </div>
       </div>
     );
   }
