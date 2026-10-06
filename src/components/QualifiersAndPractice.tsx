@@ -57,6 +57,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   const [examStarted, setExamStarted] = useState(false);
   const [examFinished, setExamFinished] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedDomainFilter, setSelectedDomainFilter] = useState<QualifierDomain | 'ALL'>('ALL');
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [secondsLeft, setSecondsLeft] = useState(
     mode === 'qualifier' ? settings.qualifierDurationMinutes * 60 : 10 * 60
@@ -66,12 +67,17 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   // Practice immediate feedback
   const [practiceFeedbackIdx, setPracticeFeedbackIdx] = useState<number | null>(null);
 
-  const questionList: QualifierQuestion[] =
+  const baseList: QualifierQuestion[] =
     mode === 'practice'
       ? PRACTICE_10_QUESTIONS
-      : [...QUALIFIER_50_QUESTIONS, ...customQuestions].slice(0, 50);
+      : [...customQuestions, ...QUALIFIER_50_QUESTIONS].slice(0, 50);
 
-  const currentQuestion = questionList[currentIndex];
+  const questionList: QualifierQuestion[] =
+    selectedDomainFilter === 'ALL'
+      ? baseList
+      : baseList.filter((q) => q.domain === selectedDomainFilter);
+
+  const currentQuestion = questionList[currentIndex] || baseList[0];
 
   // Reset when mode switches
   useEffect(() => {
@@ -619,6 +625,45 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
           className="h-full bg-amber-400 transition-all duration-200"
           style={{ width: `${((currentIndex + 1) / questionList.length) * 100}%` }}
         />
+      </div>
+
+      {/* Domain Switcher Strip (تصفح المجالات المتنوعة) */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          onClick={() => {
+            setSelectedDomainFilter('ALL');
+            setCurrentIndex(0);
+            setPracticeFeedbackIdx(null);
+          }}
+          className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition-colors ${
+            selectedDomainFilter === 'ALL'
+              ? 'bg-amber-400 text-slate-950 border-amber-300'
+              : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+          }`}
+        >
+          🌈 جميع المجالات متنوعة ({baseList.length})
+        </button>
+        {(Object.keys(DOMAIN_META) as QualifierDomain[]).map((domKey) => {
+          const count = baseList.filter((q) => q.domain === domKey).length;
+          if (count === 0) return null;
+          return (
+            <button
+              key={domKey}
+              onClick={() => {
+                setSelectedDomainFilter(domKey);
+                setCurrentIndex(0);
+                setPracticeFeedbackIdx(null);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap border transition-colors ${
+                selectedDomainFilter === domKey
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 font-bold'
+                  : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
+              }`}
+            >
+              {DOMAIN_META[domKey].label} ({count})
+            </button>
+          );
+        })}
       </div>
 
       {/* Question Card */}

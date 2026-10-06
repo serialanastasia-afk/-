@@ -31,6 +31,18 @@ interface JourneyMapViewProps {
   onSelectNode: (targetView: AppView, gameTab?: ChallengeGameId) => void;
 }
 
+const STATION_ENGLISH_CODES = [
+  'GATEWAY',
+  'INTELLIGENCE',
+  'SCIENCE',
+  'EGYPT',
+  'LANGUAGE',
+  'OBSERVATION',
+  'VELOCITY',
+  'SECRETS',
+  'CHAMPIONS',
+];
+
 export const JourneyMapView: React.FC<JourneyMapViewProps> = ({
   unlockedIndex,
   onUnlockNextNode,
@@ -38,15 +50,13 @@ export const JourneyMapView: React.FC<JourneyMapViewProps> = ({
 }) => {
   return (
     <section className="space-y-6">
-      <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-6 border border-[rgba(242,239,235,0.1)] bg-[#0f0f12] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <span className="text-xs font-semibold text-amber-400">
-            🧭 خريطة رحلة العباقرة التفاعلية — ٩ مدن ومحطات معرفية
-          </span>
-          <h2 className="text-2xl font-bold text-white font-display mt-1">
-            رحلة التحديات من بوابة البداية حتى قاعة الأبطال
+          <span className="label">JOURNEY MAP · 09 STATIONS</span>
+          <h2 className="text-2xl font-bold text-[#f2efeb] font-display mt-1">
+            🧭 خريطة رحلة العباقرة التفاعلية — ٩ محطات معرفية
           </h2>
-          <p className="text-xs text-slate-300 mt-1">
+          <p className="text-xs text-[rgba(242,239,235,0.6)] mt-1">
             كل مرحلة تفتح لك أبواب المدينة التالية بعد خوض تحدياتها بنجاح!
           </p>
         </div>
@@ -55,59 +65,43 @@ export const JourneyMapView: React.FC<JourneyMapViewProps> = ({
             soundEngine.playFanfare();
             onUnlockNextNode();
           }}
-          className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs whitespace-nowrap hover:bg-amber-300"
+          className="btn btn-primary whitespace-nowrap"
+          style={{ padding: '0.7rem 1.4rem' }}
         >
           🔓 فتح المرحلة التالية للتجربة
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="stations-grid">
         {JOURNEY_NODES.map((node, index) => {
           const isUnlocked = index <= unlockedIndex || Boolean(node.unlockedByDefault);
+          const numCode = String(index + 1).padStart(2, '0');
+          const engLabel = isUnlocked
+            ? STATION_ENGLISH_CODES[index] || 'STATION'
+            : 'LOCKED';
+
           return (
             <div
               key={node.id}
-              className={`p-6 rounded-2xl border transition-all flex flex-col justify-between ${
-                isUnlocked
-                  ? 'bg-[#131F38] border-amber-400/50 shadow-lg'
-                  : 'bg-slate-900/50 border-slate-800/80 opacity-65'
-              }`}
+              className={`station-card ${!isUnlocked ? 'locked' : ''}`}
             >
-              <div>
-                <div className="flex items-center justify-between text-xs mb-3">
-                  <span className="font-mono-num text-slate-400">المحطة 0{index + 1}</span>
-                  {isUnlocked ? (
-                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> مفتوحة الآن
-                    </span>
-                  ) : (
-                    <span className="text-slate-500 flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5" /> مغلقة
-                    </span>
-                  )}
-                </div>
-
-                <h3 className="text-xl font-bold text-white font-display">{node.title}</h3>
-                <p className="text-xs text-slate-300 mt-2 leading-relaxed">{node.subtitle}</p>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-slate-800/80">
+              <span className="label">
+                [{numCode}] {engLabel}
+              </span>
+              <h3>{node.title}</h3>
+              <p>{node.subtitle}</p>
+              {isUnlocked && (
                 <button
-                  disabled={!isUnlocked}
                   onClick={() => {
                     soundEngine.playSelectTile();
                     onSelectNode(node.targetView, node.gameTab);
                   }}
-                  className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors ${
-                    isUnlocked
-                      ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
-                      : 'bg-slate-950 text-slate-600 cursor-not-allowed'
-                  }`}
+                  className="btn btn-primary"
+                  style={{ marginTop: 'auto', padding: '0.6rem', width: '100%' }}
                 >
-                  <Play className="w-3.5 h-3.5" />
-                  <span>{isUnlocked ? 'دخول المحطة وبدء التحدي' : 'أكمل المرحلة السابقة أولاً'}</span>
+                  دخول
                 </button>
-              </div>
+              )}
             </div>
           );
         })}
@@ -530,6 +524,7 @@ interface TournamentAndLeaderboardProps {
   awards: CompetitionAward[];
   onStartGameArena: () => void;
   onOpenAwardsPage?: () => void;
+  onCreateTeam?: (newTeam: Team) => void;
 }
 
 export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> = ({
@@ -540,8 +535,22 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
   awards,
   onStartGameArena,
   onOpenAwardsPage,
+  onCreateTeam,
 }) => {
   const sortedTeams = [...teams].sort((a, b) => b.points - a.points);
+  const [showBuilder, setShowBuilder] = React.useState(false);
+  const [builderSize, setBuilderSize] = React.useState<4 | 5>(4);
+  const [builderName, setBuilderName] = React.useState('');
+  const [builderEmblem, setBuilderEmblem] = React.useState('🦅');
+  const [builderPlayers, setBuilderPlayers] = React.useState<
+    { name: string; grade: '4' | '5' | '6'; isReserve?: boolean }[]
+  >([
+    { name: '', grade: '6' },
+    { name: '', grade: '5' },
+    { name: '', grade: '5' },
+    { name: '', grade: '4' },
+    { name: '', grade: '4', isReserve: false },
+  ]);
 
   if (mode === 'how_to_play') {
     return (
@@ -588,19 +597,170 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
             <span className="text-xs font-semibold text-amber-400">
-              🧩 المرحلة الثانية: الفرق المتأهلة للبطولة المدرسية
+              🧩 المرحلة الثانية: الفرق المتأهلة لبرنامج «عباقرة عيون مصر»
             </span>
             <h2 className="text-2xl font-bold text-white font-display mt-1">
-              فرق عباقرة مدرسة عيون مصر (٤ طلاب أساسيين + احتياطي)
+              فرق عباقرة مدرسة عيون مصر (تكوين الفريق من ٤ أو ٥ لاعبين)
             </h2>
           </div>
-          <button
-            onClick={onStartGameArena}
-            className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs whitespace-nowrap"
-          >
-            🎮 دخول ساحة الألعاب والتحديات
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              onClick={() => setShowBuilder(!showBuilder)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-400 text-slate-950 font-bold text-xs whitespace-nowrap cursor-pointer hover:bg-emerald-300"
+            >
+              {showBuilder ? '✕ إغلاق نافذة تكوين الفريق' : '+ تكوين فريق جديد (4 أو 5 لاعبين)'}
+            </button>
+            <button
+              onClick={onStartGameArena}
+              className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs whitespace-nowrap cursor-pointer hover:bg-amber-300"
+            >
+              📺 دخول استوديو برنامج العباقرة
+            </button>
+          </div>
         </div>
+
+        {/* Interactive 4 or 5 Player Team Builder directly on Teams Page */}
+        {showBuilder && onCreateTeam && (
+          <div className="p-6 rounded-2xl bg-[#162442] border-2 border-amber-400/70 space-y-5 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-white font-display">
+                  ✨ تكوين فريق جديد لخوض منافسات «عباقرة عيون مصر»
+                </h3>
+                <p className="text-xs text-slate-300">
+                  اختر عدد لاعبي الفريق (٤ لاعبين أو ٥ لاعبين) وسجّل أسماءهم وصفوفهم الدراسية:
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setBuilderSize(4)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                    builderSize === 4 ? 'bg-amber-400 text-slate-950' : 'text-slate-300'
+                  }`}
+                >
+                  👥 4 لاعبين
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBuilderSize(5)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer ${
+                    builderSize === 5 ? 'bg-amber-400 text-slate-950' : 'text-slate-300'
+                  }`}
+                >
+                  🖐️ 5 لاعبين
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-slate-300 mb-1">اسم الفريق</label>
+                <input
+                  type="text"
+                  value={builderName}
+                  onChange={(e) => setBuilderName(e.target.value)}
+                  placeholder="مثال: 🦅 فريق صقور عيون مصر"
+                  className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-300 mb-1">شعار الفريق</label>
+                <input
+                  type="text"
+                  value={builderEmblem}
+                  onChange={(e) => setBuilderEmblem(e.target.value)}
+                  className="w-full px-3 py-2 text-center text-sm bg-slate-950 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {builderPlayers.slice(0, builderSize).map((pl, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
+                >
+                  <div className="text-[11px] font-bold text-amber-300">
+                    {idx === 0
+                      ? '👑 اللاعب ١ (قائد الفريق)'
+                      : idx === 4
+                      ? '🌟 اللاعب ٥ (اللاعب الخامس)'
+                      : `🎙️ اللاعب ${idx + 1}`}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={pl.name}
+                      onChange={(e) => {
+                        const next = [...builderPlayers];
+                        next[idx] = { ...next[idx], name: e.target.value };
+                        setBuilderPlayers(next);
+                      }}
+                      placeholder={`اسم اللاعب ${idx + 1}...`}
+                      className="flex-1 px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                    />
+                    <select
+                      value={pl.grade}
+                      onChange={(e) => {
+                        const next = [...builderPlayers];
+                        next[idx] = {
+                          ...next[idx],
+                          grade: e.target.value as '4' | '5' | '6',
+                        };
+                        setBuilderPlayers(next);
+                      }}
+                      className="px-2 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                    >
+                      <option value="4">صف 4</option>
+                      <option value="5">صف 5</option>
+                      <option value="6">صف 6</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!builderName.trim()) return;
+                  soundEngine.playFanfare();
+                  const now = Date.now();
+                  const membersList = builderPlayers.slice(0, builderSize).map((p, i) => ({
+                    id: `tm-${now}-${i + 1}`,
+                    name: p.name.trim() || `لاعب ${i + 1}`,
+                    grade: p.grade,
+                    isReserve: false,
+                  }));
+                  onCreateTeam({
+                    id: `team-${now}`,
+                    name: builderName.trim(),
+                    emblem: builderEmblem || '🏆',
+                    color: '#F59E0B',
+                    captainId: membersList[0].id,
+                    points: 100,
+                    wins: 0,
+                    matchesPlayed: 0,
+                    titleBadge: '🌟 عباقرة عيون مصر',
+                    cards: {
+                      challengeCard: true,
+                      swapQuestionCard: true,
+                      doublePointsCard: true,
+                    },
+                    members: membersList,
+                  });
+                  setBuilderName('');
+                  setShowBuilder(false);
+                }}
+                className="px-6 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
+              >
+                ✓ حفظ الفريق واعتماده ({builderSize} لاعبين)
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {teams.map((team) => {

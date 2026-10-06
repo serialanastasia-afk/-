@@ -1,21 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Volume2,
-  VolumeX,
-  Maximize2,
-  Share2,
   CheckCircle2,
   Siren,
-  Rocket,
-  Brain,
-  Trophy,
-  Info,
-  Compass,
-  Gamepad2,
-  Users,
-  Settings,
-  IdCard,
-  Sparkles,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import {
   AppView,
@@ -34,6 +22,7 @@ import {
   INITIAL_MATCHES,
   GENIUS_ALARM_QUESTIONS,
   OFFICIAL_AWARDS,
+  JOURNEY_NODES,
 } from './data/challengesData';
 import { QualifiersAndPractice } from './components/QualifiersAndPractice';
 import { GamesArenaHub } from './components/GamesArenaHub';
@@ -46,20 +35,44 @@ import {
 } from './components/JourneyAndCards';
 import { soundEngine } from './utils/sound';
 
-import heroArenaImg from './assets/images/oyoun_misr_arena_hero_1791274244399.jpg';
-import schoolCrestImg from './assets/images/school_crest_emblem_1791274256508.jpg';
-
 const STORAGE_STUDENTS = 'om_geniuses_students_v2';
 const STORAGE_TEAMS = 'om_geniuses_teams_v2';
 const STORAGE_SETTINGS = 'om_geniuses_settings_v2';
 const STORAGE_CUSTOM_QS = 'om_geniuses_custom_qs_v2';
 const STORAGE_AWARDS = 'om_geniuses_awards_v2';
 
+const SUB_NAV_ITEMS: { id: AppView; label: string }[] = [
+  { id: 'home', label: '🏠 الرئيسية' },
+  { id: 'games_hub', label: '📺 استوديو برنامج العباقرة' },
+  { id: 'teams', label: '🧩 الفرق (4 أو 5 لاعبين)' },
+  { id: 'qualifiers', label: '🟢 التصفيات الفردية' },
+  { id: 'practice', label: '🧠 جرّب تدريباً' },
+  { id: 'journey', label: '🧭 خريطة الرحلة' },
+  { id: 'genius_card', label: '🪪 بطاقة العبقري' },
+  { id: 'tournament', label: '🏆 البطولة النهائية' },
+  { id: 'leaderboard', label: '📊 لوحة الأبطال' },
+  { id: 'awards', label: '🏅 جوائز المسابقة' },
+  { id: 'how_to_play', label: 'ℹ️ كيف نلعب؟' },
+  { id: 'admin', label: '🛠️ لوحة المشرف' },
+];
+
+const STATION_CODES = [
+  'GATEWAY',
+  'INTELLIGENCE',
+  'SCIENCE',
+  'EGYPT',
+  'LANGUAGE',
+  'OBSERVATION',
+  'VELOCITY',
+  'SECRETS',
+  'CHAMPIONS',
+];
+
 export default function App() {
   const [currentView, setCurrentView] = useState<AppView>('home');
-  const [selectedGameTab, setSelectedGameTab] = useState<ChallengeGameId>('falcon_eye');
+  const [selectedGameTab, setSelectedGameTab] = useState<ChallengeGameId>('classic_board');
   const [adminInitialSection, setAdminInitialSection] = useState<AdminSection>('students');
-  const [unlockedJourneyIdx, setUnlockedJourneyIdx] = useState<number>(3);
+  const [unlockedJourneyIdx, setUnlockedJourneyIdx] = useState<number>(2);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -178,301 +191,211 @@ export default function App() {
     setAlarmOpen(true);
   };
 
-  const handleShareLink = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href).then(() => {
-        setToast('تم نسخ رابط موقع «عباقرة عيون مصر» لمشاركته على الهاتف والكمبيوتر والتابلت!');
-        setTimeout(() => setToast(null), 3500);
-      });
-    }
-  };
-
   const currentAlarmQ = GENIUS_ALARM_QUESTIONS[alarmIdx % GENIUS_ALARM_QUESTIONS.length];
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#0B1120] text-[#F8FAFC]">
-      {/* ==================== TOP BAR CONTRACT (3 ZONES) ==================== */}
-      <header className="sticky top-0 z-30 flex items-center justify-between px-6 py-4 bg-[#0B1120]/95 backdrop-blur-md border-b border-slate-800/80 no-print">
-        {/* Zone 1: Brand Title */}
-        <a
-          href="#home"
-          onClick={(e) => {
-            e.preventDefault();
-            setCurrentView('home');
-          }}
-          className="text-xl font-bold tracking-tight text-amber-400 font-display whitespace-nowrap"
+    <div className="app-shell bg-[#0f0f12] text-[#f2efeb]">
+      {/* ==================== ROW 1: LUXURY HEADER (Variation 2) ==================== */}
+      <header className="px-6 sm:px-12 py-6 flex justify-between items-center border-b-[1.5px] border-[#f2efeb] no-print">
+        <div
+          onClick={() => setCurrentView('home')}
+          className="font-syne text-2xl font-extrabold tracking-[-0.04em] text-[#d4af37] cursor-pointer"
         >
-          🏆 عباقرة عيون مصر
-        </a>
+          OYOUN MISR
+        </div>
 
-        {/* Zone 2: 6 Single-line Navigation Links */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-slate-300">
-          <button
-            onClick={() => setCurrentView('home')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'home'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            الرئيسية
-          </button>
-          <button
-            onClick={() => setCurrentView('journey')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'journey'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            رحلة العباقرة
-          </button>
-          <button
-            onClick={() => setCurrentView('qualifiers')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'qualifiers'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            التصفيات (50 س)
-          </button>
-          <button
-            onClick={() => setCurrentView('games_hub')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'games_hub'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            الألعاب والتحديات
-          </button>
-          <button
-            onClick={() => setCurrentView('leaderboard')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'leaderboard'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            لوحة الأبطال
-          </button>
-          <button
-            onClick={() => setCurrentView('awards')}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'awards'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            جوائز المسابقة
-          </button>
-          <button
-            onClick={() => {
-              setAdminInitialSection('students');
-              setCurrentView('admin');
-            }}
-            className={`py-1 whitespace-nowrap border-b-2 transition-colors ${
-              currentView === 'admin'
-                ? 'text-white border-amber-400 font-bold'
-                : 'border-transparent hover:text-white'
-            }`}
-          >
-            لوحة المشرف
-          </button>
+        <nav className="hidden md:flex items-center gap-8">
+          {(
+            [
+              { id: 'home', label: 'الرئيسية' },
+              { id: 'journey', label: 'رحلة العباقرة' },
+              { id: 'qualifiers', label: 'التصفيات' },
+              { id: 'games_hub', label: 'الألعاب' },
+              { id: 'awards', label: 'الجوائز' },
+              { id: 'admin', label: 'المشرف' },
+            ] as { id: AppView; label: string }[]
+          ).map((navItem) => (
+            <button
+              key={navItem.id}
+              onClick={() => {
+                if (navItem.id === 'admin') setAdminInitialSection('students');
+                setCurrentView(navItem.id);
+              }}
+              className={`bg-transparent border-none text-[0.8rem] font-bold cursor-pointer transition-colors ${
+                currentView === navItem.id
+                  ? 'text-[#f2efeb]'
+                  : 'text-[rgba(242,239,235,0.6)] hover:text-[#f2efeb]'
+              }`}
+            >
+              {navItem.label}
+            </button>
+          ))}
         </nav>
 
-        {/* Zone 3: Primary Actions */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
-            className="px-3 py-2 text-xs font-medium text-slate-200 bg-slate-800/90 border border-slate-700 rounded-lg hover:bg-slate-700 whitespace-nowrap flex items-center gap-1.5"
+            title={soundEnabled ? 'كتم الصوت' : 'تشغيل الصوت'}
+            className="p-2 rounded-full border border-[rgba(242,239,235,0.2)] text-[rgba(242,239,235,0.75)] hover:text-[#d4af37] hover:border-[#d4af37] transition-colors cursor-pointer"
           >
-            {soundEnabled ? (
-              <Volume2 className="w-4 h-4 text-amber-400" />
-            ) : (
-              <VolumeX className="w-4 h-4 text-slate-400" />
-            )}
-            <span className="hidden sm:inline">
-              {soundEnabled ? '🔊 الصوت مفعل' : '🔇 صامت'}
-            </span>
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
           </button>
-
           <button
             onClick={handleTriggerAlarm}
-            className="px-3.5 py-2 text-xs font-bold text-white bg-rose-600 rounded-lg hover:bg-rose-500 transition-colors whitespace-nowrap flex items-center gap-1.5"
+            className="status-badge cursor-pointer hover:bg-[#d4af37] hover:text-[#0f0f12] transition-colors"
           >
-            <Siren className="w-4 h-4" />
-            <span className="hidden sm:inline">إنذار العباقرة</span>
+            <span>🏆 عباقرة عيون مصر</span>
           </button>
         </div>
       </header>
 
-      {/* Secondary Quick Access Strip for Mobile & Sub-views */}
-      <div className="bg-[#111C35] border-b border-slate-800/80 px-4 py-2 no-print">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-2 overflow-x-auto text-xs">
-          <div className="flex items-center gap-1.5">
-            {(
-              [
-                { id: 'home', label: '🏠 الرئيسية' },
-                { id: 'journey', label: '🧭 خريطة الرحلة' },
-                { id: 'qualifiers', label: '🟢 التصفيات الفردية' },
-                { id: 'practice', label: '🧠 جرّب تدريباً' },
-                { id: 'genius_card', label: '🪪 بطاقة العبقري' },
-                { id: 'teams', label: '🧩 الفرق والقادة' },
-                { id: 'games_hub', label: '🎮 الألعاب الـ11' },
-                { id: 'tournament', label: '🏆 البطولة النهائية' },
-                { id: 'leaderboard', label: '📊 لوحة الأبطال' },
-                { id: 'awards', label: '🏅 جوائز وألقاب البطولة' },
-                { id: 'how_to_play', label: 'ℹ️ كيف نلعب؟' },
-                { id: 'admin', label: '🛠️ لوحة المشرف' },
-              ] as { id: AppView; label: string }[]
-            ).map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setCurrentView(item.id)}
-                className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
-                  currentView === item.id
-                    ? 'bg-amber-400 text-slate-950 font-bold'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* ==================== ROW 2: SUB-NAV STRIP (Variation 2) ==================== */}
+      <div className="px-6 sm:px-12 py-3 bg-[rgba(242,239,235,0.1)] flex items-center gap-4 overflow-x-auto no-print">
+        {SUB_NAV_ITEMS.map((item) => {
+          const isActive = currentView === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                if (item.id === 'admin') setAdminInitialSection('students');
+                setCurrentView(item.id);
+              }}
+              className={`whitespace-nowrap bg-transparent px-4 py-1.5 rounded text-[0.72rem] cursor-pointer transition-all border ${
+                isActive
+                  ? 'border-[#d4af37] text-[#d4af37] font-bold bg-[#0f0f12]/60'
+                  : 'border-transparent text-[rgba(242,239,235,0.6)] hover:border-[rgba(242,239,235,0.15)] hover:text-[#f2efeb]'
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
+      {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 left-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-xl text-xs font-bold flex items-center gap-2">
+        <div className="fixed bottom-6 left-6 z-50 bg-[#0f0f12] border border-[#d4af37] text-[#d4af37] px-5 py-3 rounded shadow-2xl text-xs font-bold flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toast}</span>
         </div>
       )}
 
-      {/* ==================== MAIN CONTENT AREA ==================== */}
-      <main className="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* ==================== 🏠 HOME VIEW ==================== */}
-        {currentView === 'home' && (
-          <div className="space-y-8">
-            {/* Hero Banner */}
-            <section className="relative rounded-3xl overflow-hidden border border-slate-800 shadow-2xl">
-              <div className="absolute inset-0 bg-gradient-to-l from-[#0B1120] via-[#0B1120]/85 to-[#0B1120]/95 z-10" />
-              <img
-                src={heroArenaImg}
-                alt="مسرح بطولة عباقرة عيون مصر"
-                referrerPolicy="no-referrer"
-                className="absolute inset-0 w-full h-full object-cover opacity-40"
-              />
+      {/* ==================== ROW 3: MAIN CONTENT AREA ==================== */}
+      {currentView === 'home' ? (
+        /* Variation 2 Split 2-Column Main Layout for Home */
+        <main className="grid grid-cols-1 lg:grid-cols-[1.45fr_1fr] gap-8 p-6 sm:p-12 overflow-y-auto items-center">
+          {/* Left/Right Column 1: Hero Editorial Section */}
+          <section className="flex flex-col justify-center">
+            <span className="label mb-3">Primary Competition 2026 · Grades 4, 5 & 6</span>
+            <h1
+              className="font-syne font-extrabold text-[#f2efeb] mb-6"
+              style={{
+                fontSize: 'clamp(2.8rem, 5.5vw, 5.5rem)',
+                lineHeight: 1.05,
+                letterSpacing: '-0.04em',
+              }}
+            >
+              عباقرة عيون مصر
+            </h1>
+            <p className="hero-tagline mb-6">
+              «فكّر أسرع… اعرف أكثر… العب كفريق!»
+            </p>
+            <p className="max-w-[520px] leading-[1.7] text-[rgba(242,239,235,0.6)] mb-10 text-sm sm:text-base">
+              مرحباً بك في البطولة التفاعلية الكبرى لطلاب المرحلة الابتدائية العليا بمدرسة عيون مصر! رحلة مشوقة تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي.
+            </p>
 
-              <div className="relative z-20 p-6 sm:p-10 lg:p-12">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  <div className="lg:col-span-8 space-y-5">
-                    <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-300 text-xs font-bold">
-                      <span>مدرسة عيون مصر · الصفوف الرابع والخامس والسادس الابتدائي</span>
-                    </div>
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={() => {
+                  soundEngine.playBuzzer();
+                  setSelectedGameTab('classic_board');
+                  setCurrentView('games_hub');
+                }}
+                className="btn btn-primary"
+              >
+                📺 استوديو برنامج العباقرة
+              </button>
+              <button
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setCurrentView('teams');
+                }}
+                className="btn btn-secondary"
+              >
+                🧩 تكوين فريق (4 أو 5 لاعبين)
+              </button>
+              <button
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setCurrentView('qualifiers');
+                }}
+                className="btn btn-secondary"
+              >
+                🟢 التصفيات الفردية
+              </button>
+              <button
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setCurrentView('practice');
+                }}
+                className="btn btn-secondary"
+              >
+                🧠 جرّب تدريباً
+              </button>
+              <button
+                onClick={() => setCurrentView('leaderboard')}
+                className="btn btn-secondary"
+              >
+                🏆 لوحة الأبطال
+              </button>
+              <button
+                onClick={() => setCurrentView('awards')}
+                className="btn btn-secondary"
+              >
+                🏅 جوائز المسابقة
+              </button>
+            </div>
+          </section>
 
-                    <div className="flex items-center gap-4">
-                      <img
-                        src={schoolCrestImg}
-                        alt="شعار مدرسة عيون مصر"
-                        referrerPolicy="no-referrer"
-                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border-2 border-amber-400/60 object-cover shrink-0"
-                      />
-                      <div>
-                        <h1 className="text-3xl sm:text-5xl font-bold text-white font-display tracking-tight">
-                          🏆 عباقرة عيون مصر
-                        </h1>
-                        <p className="text-lg sm:text-2xl font-bold text-amber-400 font-display mt-1">
-                          «فكّر أسرع… اعرف أكثر… العب كفريق!»
-                        </p>
-                      </div>
-                    </div>
+          {/* Column 2: Grid of Stations (1px Hairline Border Matrix) */}
+          <section className="stations-grid">
+            {JOURNEY_NODES.slice(0, 6).map((node, index) => {
+              const isUnlocked = index <= unlockedJourneyIdx || Boolean(node.unlockedByDefault);
+              const codeNum = String(index + 1).padStart(2, '0');
+              const codeLabel = isUnlocked ? STATION_CODES[index] : 'LOCKED';
 
-                    <p className="text-sm sm:text-base text-slate-200 max-w-2xl leading-relaxed">
-                      مرحباً بك في البطولة التفاعلية الكبرى لطلاب المرحلة الابتدائية العليا بمدرسة عيون مصر! رحلة مشوقة تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي عبر الهاتف أو الكمبيوتر أو التابلت.
-                    </p>
-
-                    {/* Primary 4 Required Hero Action Buttons + Journey Map */}
-                    <div className="pt-2 flex flex-wrap items-center gap-3.5">
-                      <button
-                        onClick={() => {
-                          soundEngine.playBuzzer();
-                          setCurrentView('qualifiers');
-                        }}
-                        className="px-6 py-3.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-sm hover:bg-amber-300 transition-all shadow-lg flex items-center gap-2"
-                      >
-                        <span>🎮 ابدأ المسابقة</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          soundEngine.playSelectTile();
-                          setCurrentView('practice');
-                        }}
-                        className="px-5 py-3.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-sm hover:bg-emerald-400 transition-all flex items-center gap-2"
-                      >
-                        <span>🧠 جرّب تدريباً</span>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentView('leaderboard')}
-                        className="px-5 py-3.5 rounded-xl bg-[#162647] border border-amber-400/50 text-white font-bold text-sm hover:bg-slate-800 transition-all flex items-center gap-2"
-                      >
-                        <span>🏆 لوحة الأبطال</span>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentView('awards')}
-                        className="px-5 py-3.5 rounded-xl bg-[#162647] border border-emerald-400/50 text-emerald-300 font-bold text-sm hover:bg-slate-800 transition-all flex items-center gap-2"
-                      >
-                        <span>🏅 جوائز وألقاب المسابقة</span>
-                      </button>
-
-                      <button
-                        onClick={() => setCurrentView('how_to_play')}
-                        className="px-5 py-3.5 rounded-xl bg-slate-900/90 border border-slate-700 text-slate-200 font-semibold text-sm hover:text-white hover:border-slate-500 transition-all flex items-center gap-2"
-                      >
-                        <span>ℹ️ كيف نلعب؟</span>
-                      </button>
-
-                      <button
-                        onClick={handleShareLink}
-                        className="px-4 py-3.5 rounded-xl bg-slate-900/90 border border-slate-700 text-sky-300 text-xs font-semibold hover:text-white flex items-center gap-1.5"
-                      >
-                        <Share2 className="w-4 h-4" />
-                        <span>مشاركة رابط الموقع</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Visual Symbols of Intelligence & Knowledge */}
-                  <div className="lg:col-span-4 grid grid-cols-2 gap-3">
-                    {[
-                      { icon: '💡', title: 'مصباح الفكرة', sub: 'المعلومة الغامضة والابتكار' },
-                      { icon: '🧩', title: 'قطع الألغاز', sub: 'مخ العباقرة والاستنتاج' },
-                      { icon: '👁️', title: 'عين الصقر', sub: 'قوة الملاحظة والذاكرة' },
-                      { icon: '🌍', title: 'مصر والكواكب', sub: 'العلوم والحضارة المصرية' },
-                      { icon: '➗', title: 'الأرقام والأنماط', sub: 'سرعة البرق والحساب الذهني' },
-                      { icon: '⭐', title: 'نجمة البطولة', sub: 'غرفة الأسرار وكأس العباقرة' },
-                    ].map((card) => (
-                      <div
-                        key={card.title}
-                        onClick={() => setCurrentView('games_hub')}
-                        className="p-4 rounded-2xl bg-slate-900/85 border border-slate-800 hover:border-amber-400/60 transition-all cursor-pointer"
-                      >
-                        <div className="text-2xl mb-1">{card.icon}</div>
-                        <div className="text-xs font-bold text-white font-display">{card.title}</div>
-                        <div className="text-[11px] text-slate-400 mt-0.5">{card.sub}</div>
-                      </div>
-                    ))}
-                  </div>
+              return (
+                <div
+                  key={node.id}
+                  className={`station-card ${!isUnlocked ? 'locked' : ''}`}
+                >
+                  <span className="label">
+                    [{codeNum}] {codeLabel}
+                  </span>
+                  <h3>{node.title}</h3>
+                  <p>{node.subtitle}</p>
+                  {isUnlocked && (
+                    <button
+                      onClick={() => {
+                        soundEngine.playSelectTile();
+                        if (node.gameTab) setSelectedGameTab(node.gameTab);
+                        setCurrentView(node.targetView);
+                      }}
+                      className="btn btn-primary"
+                      style={{ marginTop: 'auto', padding: '0.6rem', width: '100%' }}
+                    >
+                      دخول
+                    </button>
+                  )}
                 </div>
-              </div>
-            </section>
-
-            {/* Quick Interactive Preview of the Journey Map on Home Page */}
+              );
+            })}
+          </section>
+        </main>
+      ) : (
+        /* Inner Views Container */
+        <main className="p-6 sm:p-12 overflow-y-auto">
+          {currentView === 'journey' && (
             <JourneyMapView
               unlockedIndex={unlockedJourneyIdx}
               onUnlockNextNode={() =>
@@ -483,130 +406,124 @@ export default function App() {
                 setCurrentView(target);
               }}
             />
-          </div>
-        )}
+          )}
 
-        {/* ==================== 🧭 JOURNEY VIEW ==================== */}
-        {currentView === 'journey' && (
-          <JourneyMapView
-            unlockedIndex={unlockedJourneyIdx}
-            onUnlockNextNode={() =>
-              setUnlockedJourneyIdx((prev) => Math.min(8, prev + 1))
-            }
-            onSelectNode={(target, gameTab) => {
-              if (gameTab) setSelectedGameTab(gameTab);
-              setCurrentView(target);
-            }}
-          />
-        )}
+          {(currentView === 'qualifiers' || currentView === 'practice') && (
+            <QualifiersAndPractice
+              mode={currentView === 'qualifiers' ? 'qualifier' : 'practice'}
+              settings={settings}
+              students={students}
+              onRegisterStudent={(newStu) => setStudents((prev) => [newStu, ...prev])}
+              onCompleteQualifier={(stuId, updated) => {
+                setStudents((prev) =>
+                  prev.map((s) => (s.id === stuId ? updated : s))
+                );
+                setUnlockedJourneyIdx((prev) => Math.max(prev, 5));
+              }}
+              onNavigateView={(v) => setCurrentView(v)}
+              activeStudent={activeStudent}
+              setActiveStudent={setActiveStudent}
+              customQuestions={customQuestions}
+            />
+          )}
 
-        {/* ==================== 🟢 QUALIFIERS (50 Qs) & 🧠 PRACTICE (10 Qs) ==================== */}
-        {(currentView === 'qualifiers' || currentView === 'practice') && (
-          <QualifiersAndPractice
-            mode={currentView === 'qualifiers' ? 'qualifier' : 'practice'}
-            settings={settings}
-            students={students}
-            onRegisterStudent={(newStu) => setStudents((prev) => [newStu, ...prev])}
-            onCompleteQualifier={(stuId, updated) => {
-              setStudents((prev) =>
-                prev.map((s) => (s.id === stuId ? updated : s))
-              );
-              setUnlockedJourneyIdx((prev) => Math.max(prev, 5));
-            }}
-            onNavigateView={(v) => setCurrentView(v)}
-            activeStudent={activeStudent}
-            setActiveStudent={setActiveStudent}
-            customQuestions={customQuestions}
-          />
-        )}
+          {currentView === 'genius_card' && activeStudent && (
+            <GeniusCardView
+              student={activeStudent}
+              allStudents={students}
+              onSelectStudent={(s) => setActiveStudent(s)}
+            />
+          )}
 
-        {/* ==================== 🪪 GENIUS CARD VIEW ==================== */}
-        {currentView === 'genius_card' && activeStudent && (
-          <GeniusCardView
-            student={activeStudent}
-            allStudents={students}
-            onSelectStudent={(s) => setActiveStudent(s)}
-          />
-        )}
+          {currentView === 'games_hub' && (
+            <GamesArenaHub
+              initialGameTab={selectedGameTab}
+              teams={teams}
+              onAwardTeamPoints={handleAwardTeamPoints}
+              onUseTeamCard={handleUseTeamCard}
+              settings={settings}
+              onTriggerGeniusAlarm={handleTriggerAlarm}
+            />
+          )}
 
-        {/* ==================== 🎮 11 GAMES & CHALLENGES HUB ==================== */}
-        {currentView === 'games_hub' && (
-          <GamesArenaHub
-            initialGameTab={selectedGameTab}
-            teams={teams}
-            onAwardTeamPoints={handleAwardTeamPoints}
-            onUseTeamCard={handleUseTeamCard}
-            settings={settings}
-            onTriggerGeniusAlarm={handleTriggerAlarm}
-          />
-        )}
+          {currentView === 'awards' && (
+            <AwardsShowcaseView
+              awards={awards}
+              students={students}
+              teams={teams}
+              onGoToAdminAwards={() => {
+                setAdminInitialSection('awards');
+                setCurrentView('admin');
+              }}
+            />
+          )}
 
-        {/* ==================== 🏅 AWARDS SHOWCASE PAGE ==================== */}
-        {currentView === 'awards' && (
-          <AwardsShowcaseView
-            awards={awards}
-            students={students}
-            teams={teams}
-            onGoToAdminAwards={() => {
-              setAdminInitialSection('awards');
-              setCurrentView('admin');
-            }}
-          />
-        )}
+          {(currentView === 'teams' ||
+            currentView === 'tournament' ||
+            currentView === 'leaderboard' ||
+            currentView === 'how_to_play') && (
+            <TournamentAndLeaderboard
+              mode={currentView}
+              teams={teams}
+              students={students}
+              matches={matches}
+              settings={settings}
+              awards={awards}
+              onStartGameArena={() => {
+                setSelectedGameTab('classic_board');
+                setCurrentView('games_hub');
+              }}
+              onOpenAwardsPage={() => setCurrentView('awards')}
+              onCreateTeam={(newTeam) => {
+                setTeams((prev) => [newTeam, ...prev]);
+                setToast(`تم إنشاء ${newTeam.name} (${newTeam.members.length} لاعبين) بنجاح!`);
+                setTimeout(() => setToast(null), 3500);
+              }}
+            />
+          )}
 
-        {/* ==================== 🧩 TEAMS / 🏆 TOURNAMENT / 📊 LEADERBOARD / ℹ️ HOW TO PLAY ==================== */}
-        {(currentView === 'teams' ||
-          currentView === 'tournament' ||
-          currentView === 'leaderboard' ||
-          currentView === 'how_to_play') && (
-          <TournamentAndLeaderboard
-            mode={currentView}
-            teams={teams}
-            students={students}
-            matches={matches}
-            settings={settings}
-            awards={awards}
-            onStartGameArena={() => setCurrentView('games_hub')}
-            onOpenAwardsPage={() => setCurrentView('awards')}
-          />
-        )}
+          {currentView === 'admin' && (
+            <AdminDashboard
+              students={students}
+              setStudents={setStudents}
+              teams={teams}
+              setTeams={setTeams}
+              customQuestions={customQuestions}
+              setCustomQuestions={setCustomQuestions}
+              settings={settings}
+              setSettings={setSettings}
+              matches={matches}
+              setMatches={setMatches}
+              awards={awards}
+              setAwards={setAwards}
+              initialSection={adminInitialSection}
+              onTriggerGeniusAlarm={handleTriggerAlarm}
+            />
+          )}
+        </main>
+      )}
 
-        {/* ==================== 🛠️ ADMIN DASHBOARD ==================== */}
-        {currentView === 'admin' && (
-          <AdminDashboard
-            students={students}
-            setStudents={setStudents}
-            teams={teams}
-            setTeams={setTeams}
-            customQuestions={customQuestions}
-            setCustomQuestions={setCustomQuestions}
-            settings={settings}
-            setSettings={setSettings}
-            matches={matches}
-            setMatches={setMatches}
-            awards={awards}
-            setAwards={setAwards}
-            initialSection={adminInitialSection}
-            onTriggerGeniusAlarm={handleTriggerAlarm}
-          />
-        )}
-      </main>
+      {/* ==================== ROW 4: LUXURY FOOTER (Variation 2) ==================== */}
+      <footer className="border-t border-[rgba(242,239,235,0.1)] px-6 sm:px-12 py-6 flex flex-col sm:flex-row justify-between items-center gap-2 no-print">
+        <div className="label">© 2026 OYOUN MISR SCHOOL - GENIUS COMPETITION</div>
+        <div className="label">DEVELOPED FOR EXCELLENCE</div>
+      </footer>
 
       {/* ==================== 🚨 GENIUS ALARM GLOBAL MODAL ==================== */}
       {alarmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
-          <div className="w-full max-w-2xl rounded-3xl bg-[#161F35] border-2 border-rose-500 p-6 sm:p-8 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+          <div className="w-full max-w-2xl bg-[#0f0f12] border-2 border-[#d4af37] p-6 sm:p-8 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[rgba(242,239,235,0.1)] pb-4">
+              <div className="flex items-center gap-2 text-[#d4af37] font-bold text-sm">
                 <Siren className="w-5 h-5" />
                 <span>{currentAlarmQ.title}</span>
               </div>
-              <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-mono-num font-bold text-xs">
-                +{currentAlarmQ.doublePoints} نقطة مضاعفة!
+              <span className="status-badge">
+                +{currentAlarmQ.doublePoints} نقطة مضاعفة
               </span>
             </div>
 
-            <div className="text-xs text-slate-300">
+            <div className="text-xs text-[rgba(242,239,235,0.6)]">
               تتنافس جميع الفرق في اللحظة نفسها! حدد الفريق الأسرع في الإجابة الصحيحة لمنحه النقاط المضاعفة:
             </div>
 
@@ -615,10 +532,10 @@ export default function App() {
                 <button
                   key={t.id}
                   onClick={() => setAlarmWinnerTeamId(t.id)}
-                  className={`px-3.5 py-2 rounded-xl text-xs font-bold border ${
+                  className={`px-3.5 py-2 text-xs font-bold border transition-all cursor-pointer ${
                     alarmWinnerTeamId === t.id
-                      ? 'bg-amber-400 text-slate-950 border-amber-300'
-                      : 'bg-slate-900 text-slate-300 border-slate-700'
+                      ? 'bg-[#d4af37] text-[#0f0f12] border-[#d4af37]'
+                      : 'bg-transparent text-[#f2efeb] border-[rgba(242,239,235,0.2)]'
                   }`}
                 >
                   {t.name}
@@ -626,7 +543,7 @@ export default function App() {
               ))}
             </div>
 
-            <h3 className="text-xl font-bold text-white font-display leading-relaxed">
+            <h3 className="text-xl font-bold text-[#f2efeb] font-display leading-relaxed">
               {currentAlarmQ.question}
             </h3>
 
@@ -634,7 +551,7 @@ export default function App() {
               {currentAlarmQ.options.map((opt, idx) => {
                 const isCorrect = idx === currentAlarmQ.correctIndex;
                 const isChosen = alarmSelectedOpt === idx;
-                let cls = 'bg-slate-900 border-slate-700 text-white hover:border-amber-400';
+                let cls = 'bg-[#141418] border-[rgba(242,239,235,0.15)] text-[#f2efeb] hover:border-[#d4af37]';
                 if (alarmSelectedOpt !== null) {
                   if (isCorrect) cls = 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-bold';
                   else if (isChosen) cls = 'bg-rose-500/20 border-rose-400 text-rose-200';
@@ -652,7 +569,7 @@ export default function App() {
                         soundEngine.playWrong();
                       }
                     }}
-                    className={`p-4 rounded-xl border text-right text-sm ${cls}`}
+                    className={`p-4 border text-right text-sm cursor-pointer ${cls}`}
                   >
                     {opt}
                   </button>
@@ -660,34 +577,27 @@ export default function App() {
               })}
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between pt-3 border-t border-[rgba(242,239,235,0.1)]">
               <button
                 onClick={() => {
                   setAlarmIdx((i) => i + 1);
                   setAlarmSelectedOpt(null);
                 }}
-                className="text-xs text-amber-400 hover:underline"
+                className="text-xs text-[#d4af37] hover:underline cursor-pointer"
               >
                 سؤال إنذار آخر ←
               </button>
               <button
                 onClick={() => setAlarmOpen(false)}
-                className="px-5 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-700"
+                className="btn btn-secondary"
+                style={{ padding: '0.5rem 1.2rem' }}
               >
-                إغلاق الإنذار
+                إغلاق
               </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* ==================== FOOTER ==================== */}
-      <footer className="mt-auto border-t border-slate-800/80 py-5 px-6 text-center text-xs text-slate-400 no-print">
-        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span>🏆 عباقرة عيون مصر — مسابقة الذكاء والمعرفة لطلاب الصفوف الرابع والخامس والسادس الابتدائي</span>
-          <span>«فكّر أسرع… اعرف أكثر… العب كفريق!» · تطبيق ويب تفاعلي متوافق مع الهاتف والكمبيوتر والتابلت</span>
-        </div>
-      </footer>
     </div>
   );
 }

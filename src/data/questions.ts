@@ -8,13 +8,16 @@ export type CategoryId =
   | 'english'
   | 'general'
   | 'arts_sports'
-  | 'technology';
+  | 'technology'
+  | 'wonders'
+  | 'personalities';
 
 export interface CategoryInfo {
   id: CategoryId;
   name: string;
   subtitle: string;
   accentColor: string;
+  icon?: string;
 }
 
 export interface QuestionItem {
@@ -31,52 +34,60 @@ export interface QuestionItem {
 
 export const CATEGORIES: CategoryInfo[] = [
   {
-    id: 'arabic',
-    name: 'اللغة العربية والنحو',
-    subtitle: 'القواعد النحوية · البلاغة المبسطة · الإملاء والمفردات',
-    accentColor: '#F59E0B',
-  },
-  {
     id: 'science',
-    name: 'العلوم والابتكار',
-    subtitle: 'أنظمة الكائنات الحية · الطاقة · الفضاء والمادة',
+    name: '🔬 العلم',
+    subtitle: 'الطبيعة · الفضاء · جسم الإنسان والبيئة',
     accentColor: '#10B981',
-  },
-  {
-    id: 'math',
-    name: 'الرياضيات والمنطق',
-    subtitle: 'العمليات الحسابية · الكسور · الهندسة والألغاز الذهنية',
-    accentColor: '#38BDF8',
-  },
-  {
-    id: 'social',
-    name: 'الدراسات وتاريخ مصر',
-    subtitle: 'الحضارة المصرية · جغرافيا الوطن العربي · الهوية الوطنية',
-    accentColor: '#F97316',
-  },
-  {
-    id: 'english',
-    name: 'اللغة الإنجليزية',
-    subtitle: 'Vocabulary · Grammar · Reading Comprehension',
-    accentColor: '#A855F7',
+    icon: '🔬',
   },
   {
     id: 'general',
-    name: 'المعلومات العامة والتراث',
-    subtitle: 'معالم العالم · عواصم الدول · الاختراعات الكبرى',
+    name: '🌍 المعرفة',
+    subtitle: 'المعلومات العامة · عواصم الدول · ثقافة الشعوب',
     accentColor: '#EC4899',
+    icon: '🌍',
+  },
+  {
+    id: 'social',
+    name: '🇪🇬 التاريخ والجغرافيا',
+    subtitle: 'الحضارة المصرية · محافظات مصر · الآثار الخالدة',
+    accentColor: '#F97316',
+    icon: '🇪🇬',
   },
   {
     id: 'arts_sports',
-    name: 'الفنون والرياضة',
-    subtitle: 'الألعاب الأولمبية · الموسيقى والرسم · أبطال مصر',
+    name: '⚽ الرياضة والفنون',
+    subtitle: 'كرة القدم · الألعاب الأولمبية · الرسم والموسيقى',
     accentColor: '#14B8A6',
+    icon: '⚽',
+  },
+  {
+    id: 'arabic',
+    name: '📚 الأدب واللغة',
+    subtitle: 'المفردات · الأضداد · القواعد النحوية المبسطة',
+    accentColor: '#F59E0B',
+    icon: '📚',
+  },
+  {
+    id: 'math',
+    name: '🧠 قدرات ذهنية وحساب',
+    subtitle: 'الحساب الذهني السريع · الأنماط · التفكير المنطقي',
+    accentColor: '#38BDF8',
+    icon: '🧠',
   },
   {
     id: 'technology',
-    name: 'التكنولوجيا والذكاء الرقمي',
-    subtitle: 'الأمن السيبراني · البرمجة · مهارات المستقبل',
+    name: '💻 التكنولوجيا',
+    subtitle: 'الحاسوب · الإنترنت الآمن · ابتكارات العصر',
     accentColor: '#6366F1',
+    icon: '💻',
+  },
+  {
+    id: 'english',
+    name: '🌐 عجائب وشخصيات',
+    subtitle: 'علماء وأبطال · معالم العالم · اختراعات شهيرة',
+    accentColor: '#A855F7',
+    icon: '🌐',
   },
 ];
 

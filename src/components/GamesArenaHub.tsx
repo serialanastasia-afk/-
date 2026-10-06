@@ -44,21 +44,21 @@ interface GamesArenaHubProps {
 }
 
 const GAME_TABS: { id: ChallengeGameId; label: string; icon: string; shortDesc: string }[] = [
+  { id: 'classic_board', label: '📺 استوديو برنامج العباقرة (لوحة المجالات)', icon: '📺', shortDesc: 'المواجهة التلفزيونية المباشرة بين الفريقين على غرار برنامج العباقرة' },
   { id: 'falcon_eye', label: '👁️ عين الصقر', icon: '👁️', shortDesc: 'ملاحظة الصورة في ٥ ثوانٍ قبل اختفائها' },
   { id: 'lightning_speed', label: '⚡ سرعة البرق', icon: '⚡', shortDesc: 'نقاط إضافية كلما أجبت أسرع' },
   { id: 'genius_brain', label: '🧠 مخ العباقرة', icon: '🧠', shortDesc: 'ألغاز تفكير واستنتاج وعلاقات منطقية' },
   { id: 'mystery_fact', label: '🔬 المعلومة الغامضة', icon: '🔬', shortDesc: 'تعلم معلومة جديدة واستنتج الحل فوراً' },
-  { id: 'risk_challenge', label: '🎯 تحدي المخاطرة', icon: '🎯', shortDesc: 'اختر ١٠ أو ٢٠ أو ٣٠ أو ٥٠ نقطة قبل السؤال' },
+  { id: 'risk_challenge', label: '🎯 فقرة عجلة الحظ والمخاطرة', icon: '🎯', shortDesc: 'اختر ١٠ أو ٢٠ أو ٣٠ أو ٥٠ نقطة قبل السؤال' },
   { id: 'point_steal', label: '🔥 سرقة النقاط', icon: '🔥', shortDesc: 'اقنص نقاط السؤال إذا أخطأ الفريق المنافس' },
   { id: 'mystery_box', label: '📦 الصندوق الغامض', icon: '📦', shortDesc: '٥ صناديق مفاجآت بينها الصندوق الأسود' },
-  { id: 'no_talking', label: '🎭 ممنوع الكلام', icon: '🎭', shortDesc: 'تمثيل صامت بالإشارات فقط خلال ٦٠ ثانية' },
+  { id: 'no_talking', label: '🎭 فقرة التمثيل الصامت (الفنون)', icon: '🎭', shortDesc: 'تمثيل صامت بالإشارات فقط خلال ٦٠ ثانية' },
   { id: 'egypt_minute', label: '🇪🇬 مصر في دقيقة', icon: '🇪🇬', shortDesc: 'اذكر أكبر عدد من عناصر مصر في ٦٠ ثانية' },
   { id: 'escape_room', label: '🔐 غرفة العباقرة', icon: '🔐', shortDesc: 'حل ٣ ألغاز متتالية لفتح رمز الخروج' },
-  { id: 'classic_board', label: '🏛️ لوحة المجالات', icon: '🏛️', shortDesc: 'لوحة العباقرة الكلاسيكية للمواجهات المباشرة' },
 ];
 
 export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
-  initialGameTab = 'falcon_eye',
+  initialGameTab = 'classic_board',
   teams,
   onAwardTeamPoints,
   onUseTeamCard,
@@ -69,6 +69,10 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
   const [selectedTeamId, setSelectedTeamId] = useState<string>(teams[0]?.id || 'team-nile');
   const [rivalTeamId, setRivalTeamId] = useState<string>(teams[1]?.id || 'team-geniuses');
   const [doubleCardActive, setDoubleCardActive] = useState(false);
+  const [answeringMemberId, setAnsweringMemberId] = useState<string>('');
+  const [classicTimer, setClassicTimer] = useState<number>(30);
+  const [classicTimerRunning, setClassicTimerRunning] = useState<boolean>(false);
+  const [classicStealTurn, setClassicStealTurn] = useState<boolean>(false);
 
   useEffect(() => {
     if (initialGameTab) setActiveGame(initialGameTab);
@@ -217,91 +221,213 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
   const [classicActiveQ, setClassicActiveQ] = useState<typeof INITIAL_QUESTIONS[0] | null>(null);
   const [classicChosen, setClassicChosen] = useState<number | null>(null);
 
+  useEffect(() => {
+    if (!classicTimerRunning || classicChosen !== null || !classicActiveQ) return;
+    if (classicTimer <= 0) {
+      setClassicTimerRunning(false);
+      soundEngine.playBuzzer();
+      return;
+    }
+    const t = setTimeout(() => setClassicTimer((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [classicTimerRunning, classicTimer, classicChosen, classicActiveQ]);
+
+  const activeCaptain = activeTeam?.members.find((m) => m.id === activeTeam.captainId) || activeTeam?.members[0];
+  const rivalCaptain = rivalTeam?.members.find((m) => m.id === rivalTeam.captainId) || rivalTeam?.members[0];
+
   return (
     <div className="space-y-6">
-      {/* Top Active Team & Special Cards Bar */}
-      <div className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <label className="block text-[11px] text-slate-400 mb-1">🎤 الفريق صاحب الدور (بقيادة القائد):</label>
-            <select
-              value={selectedTeamId}
-              onChange={(e) => setSelectedTeamId(e.target.value)}
-              className="px-3.5 py-2 text-sm font-bold bg-slate-950 border border-amber-400/60 rounded-xl text-white"
-            >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.points} نقطة)
-                </option>
-              ))}
-            </select>
+      {/* ==================== 📺 AL-ABAKERA TV STUDIO DUAL PODIUM SCOREBOARD ==================== */}
+      <div className="rounded-3xl bg-gradient-to-b from-[#16223B] via-[#111A2E] to-[#0B101D] border-2 border-[#d4af37]/60 p-5 sm:p-6 shadow-2xl space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/90 pb-4">
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 rounded-full bg-[#d4af37] text-[#0f0f12] text-xs font-extrabold tracking-wide">
+              📺 استوديو برنامج العباقرة — مدرسة عيون مصر
+            </span>
+            <span className="text-xs text-slate-300 hidden sm:inline">
+              نظام المواجهة التلفزيونية المباشرة بين الفريقين (٤ أو ٥ لاعبين لكل فريق)
+            </span>
           </div>
 
-          <div>
-            <label className="block text-[11px] text-slate-400 mb-1">🔥 الفريق المنافس (جاهز لسرقة النقاط):</label>
-            <select
-              value={rivalTeamId}
-              onChange={(e) => setRivalTeamId(e.target.value)}
-              className="px-3.5 py-2 text-sm font-semibold bg-slate-950 border border-slate-700 rounded-xl text-slate-200"
+          {/* Special Cards (🃏 كروت خاصة) + Genius Alarm Button */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-amber-300 font-bold ml-1">🃏 كروت المساعدة:</span>
+            <button
+              disabled={!activeTeam?.cards.doublePointsCard || doubleCardActive}
+              onClick={() => {
+                if (!activeTeam) return;
+                soundEngine.playBuzzer();
+                setDoubleCardActive(true);
+                onUseTeamCard(activeTeam.id, 'doublePointsCard');
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                doubleCardActive
+                  ? 'bg-amber-400 text-slate-950 border-amber-300'
+                  : activeTeam?.cards.doublePointsCard
+                  ? 'bg-slate-900 text-amber-300 border-amber-500/40 hover:bg-amber-400 hover:text-slate-950'
+                  : 'bg-slate-950 text-slate-600 border-slate-800 cursor-not-allowed'
+              }`}
             >
-              {teams.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.points} نقطة)
-                </option>
-              ))}
-            </select>
+              🃏 مضاعفة النقاط {doubleCardActive ? '(مفعّل ×٢)' : ''}
+            </button>
+
+            <button
+              disabled={!activeTeam?.cards.swapQuestionCard}
+              onClick={() => {
+                if (!activeTeam) return;
+                soundEngine.playSelectTile();
+                onUseTeamCard(activeTeam.id, 'swapQuestionCard');
+                setFeIndex((i) => i + 1);
+                setLtIndex((i) => i + 1);
+                setGbIndex((i) => i + 1);
+                setMfIndex((i) => i + 1);
+              }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                activeTeam?.cards.swapQuestionCard
+                  ? 'bg-slate-900 text-sky-300 border-sky-500/40 hover:bg-sky-400 hover:text-slate-950'
+                  : 'bg-slate-950 text-slate-600 border-slate-800 cursor-not-allowed'
+              }`}
+            >
+              🃏 تبديل السؤال
+            </button>
+
+            <button
+              onClick={onTriggerGeniusAlarm}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-500 transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
+            >
+              <Siren className="w-4 h-4" />
+              <span>🚨 جرس إنذار العباقرة!</span>
+            </button>
           </div>
         </div>
 
-        {/* Special Cards (🃏 كروت خاصة) + Genius Alarm Button */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 ml-1">🃏 كروت القائد:</span>
-          <button
-            disabled={!activeTeam?.cards.doublePointsCard || doubleCardActive}
-            onClick={() => {
-              if (!activeTeam) return;
-              soundEngine.playBuzzer();
-              setDoubleCardActive(true);
-              onUseTeamCard(activeTeam.id, 'doublePointsCard');
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-              doubleCardActive
-                ? 'bg-amber-400 text-slate-950 border-amber-300'
-                : activeTeam?.cards.doublePointsCard
-                ? 'bg-slate-900 text-amber-300 border-amber-500/40 hover:bg-amber-400 hover:text-slate-950'
-                : 'bg-slate-950 text-slate-600 border-slate-800 cursor-not-allowed'
-            }`}
-          >
-            🃏 مضاعفة النقاط {doubleCardActive ? '(مفعّل ×٢)' : ''}
-          </button>
+        {/* Two Opposing Studio Podiums: Right Podium (Active Team) vs Left Podium (Rival Team) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+          {/* Right Podium: Active Team */}
+          <div className="lg:col-span-5 p-4 rounded-2xl bg-slate-950/90 border-2 border-amber-400/70 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[11px] font-bold">
+                  🎤 منصة الفريق صاحب الدور
+                </span>
+                <select
+                  value={selectedTeamId}
+                  onChange={(e) => setSelectedTeamId(e.target.value)}
+                  className="px-2.5 py-1 text-sm font-bold bg-slate-900 border border-amber-400/50 rounded-lg text-white"
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.members.length} لاعبين)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-left">
+                <div className="text-2xl font-extrabold font-mono-num text-amber-400">
+                  {activeTeam?.points || 0}
+                </div>
+                <div className="text-[10px] text-slate-400">نقطة</div>
+              </div>
+            </div>
 
-          <button
-            disabled={!activeTeam?.cards.swapQuestionCard}
-            onClick={() => {
-              if (!activeTeam) return;
-              soundEngine.playSelectTile();
-              onUseTeamCard(activeTeam.id, 'swapQuestionCard');
-              setFeIndex((i) => i + 1);
-              setLtIndex((i) => i + 1);
-              setGbIndex((i) => i + 1);
-              setMfIndex((i) => i + 1);
-            }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-              activeTeam?.cards.swapQuestionCard
-                ? 'bg-slate-900 text-sky-300 border-sky-500/40 hover:bg-sky-400 hover:text-slate-950'
-                : 'bg-slate-950 text-slate-600 border-slate-800 cursor-not-allowed'
-            }`}
-          >
-            🃏 تبديل السؤال
-          </button>
+            {/* 4 or 5 Players Podium Seats */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
+              {activeTeam?.members.map((m, idx) => {
+                const isCapt = activeTeam.captainId === m.id;
+                const isSelectedPlayer = answeringMemberId === m.id || (!answeringMemberId && isCapt);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setAnsweringMemberId(m.id)}
+                    className={`p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                      isSelectedPlayer
+                        ? 'bg-amber-400/20 border-amber-400 text-white'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-300 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="text-[10px] text-amber-300 font-bold">
+                      {isCapt ? '👑 القائد' : m.isReserve ? '🔄 لاعب 5' : `🎙️ مقعد ${idx + 1}`}
+                    </div>
+                    <div className="text-[11px] font-bold truncate mt-0.5">{m.name}</div>
+                    <div className="text-[10px] text-slate-400">صف {m.grade}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          <button
-            onClick={onTriggerGeniusAlarm}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-500 transition-colors flex items-center gap-1.5 shadow-md"
-          >
-            <Siren className="w-4 h-4" />
-            <span>🚨 إنذار العباقرة!</span>
-          </button>
+          {/* Center Studio VS & Turn Switcher */}
+          <div className="lg:col-span-2 flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-900/70 border border-slate-800 text-center space-y-2">
+            <div className="text-xs font-bold text-[#d4af37] tracking-widest">AL-ABAKERA</div>
+            <div className="w-12 h-12 rounded-full bg-[#d4af37]/15 border-2 border-[#d4af37] flex items-center justify-center text-lg font-extrabold text-[#d4af37]">
+              VS
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playSelectTile();
+                const temp = selectedTeamId;
+                setSelectedTeamId(rivalTeamId);
+                setRivalTeamId(temp);
+                setAnsweringMemberId('');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-[11px] font-bold text-slate-200 transition-colors cursor-pointer w-full"
+            >
+              🔄 تبديل الدور بين المنصتين
+            </button>
+          </div>
+
+          {/* Left Podium: Rival Team */}
+          <div className="lg:col-span-5 p-4 rounded-2xl bg-slate-950/90 border-2 border-sky-400/60 flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-sky-400 text-slate-950 text-[11px] font-bold">
+                  🔥 منصة الفريق المنافس
+                </span>
+                <select
+                  value={rivalTeamId}
+                  onChange={(e) => setRivalTeamId(e.target.value)}
+                  className="px-2.5 py-1 text-sm font-bold bg-slate-900 border border-sky-400/50 rounded-lg text-white"
+                >
+                  {teams.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.members.length} لاعبين)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="text-left">
+                <div className="text-2xl font-extrabold font-mono-num text-sky-400">
+                  {rivalTeam?.points || 0}
+                </div>
+                <div className="text-[10px] text-slate-400">نقطة</div>
+              </div>
+            </div>
+
+            {/* 4 or 5 Players Podium Seats */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1">
+              {rivalTeam?.members.map((m, idx) => {
+                const isCapt = rivalTeam.captainId === m.id;
+                return (
+                  <div
+                    key={m.id}
+                    className={`p-2 rounded-xl border text-center ${
+                      isCapt
+                        ? 'bg-sky-500/15 border-sky-400/60 text-white'
+                        : 'bg-slate-900/90 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div className="text-[10px] text-sky-300 font-bold">
+                      {isCapt ? '👑 القائد' : m.isReserve ? '🔄 لاعب 5' : `🎙️ مقعد ${idx + 1}`}
+                    </div>
+                    <div className="text-[11px] font-bold truncate mt-0.5">{m.name}</div>
+                    <div className="text-[10px] text-slate-400">صف {m.grade}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1137,18 +1263,47 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
         </div>
       )}
 
-      {/* ==================== GAME 12: 🏛️ CLASSIC BOARD (لوحة المجالات الثمانية المحفوظة) ==================== */}
+      {/* ==================== GAME 12: 📺 AL-ABAKERA TV STUDIO BOARD (لوحة مجالات برنامج العباقرة) ==================== */}
       {activeGame === 'classic_board' && (
-        <div className="space-y-5">
+        <div className="space-y-6">
+          <div className="p-4 rounded-2xl bg-[#131F38] border border-amber-400/40 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
+                <span>📺 لوحة مجالات برنامج «العباقرة» الرسمية</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40">
+                  ٨ مجالات × ٣ مستويات (١٠ - ٢٠ - ٣٠ نقطة)
+                </span>
+              </h3>
+              <p className="text-xs text-slate-300 mt-1">
+                يختار قائد الفريق ({activeCaptain?.name}) المجال وقيمة السؤال (١٠ أو ٢٠ أو ٣٠ نقطة). في حال الإجابة الخاطئة تنتقل فرصة سرقة السؤال للفريق المنافس ({rivalTeam?.name})!
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setClassicAnswered({});
+                setClassicActiveQ(null);
+                setClassicChosen(null);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white cursor-pointer"
+            >
+              🔄 تصفير لوحة المجالات لمباراة جديدة
+            </button>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {CATEGORIES.map((cat) => {
               const catQs = INITIAL_QUESTIONS.filter((q) => q.categoryId === cat.id).slice(0, 3);
               return (
-                <div key={cat.id} className="p-5 rounded-xl bg-[#131F38] border border-slate-800">
-                  <h4 className="text-base font-bold font-display" style={{ color: cat.accentColor }}>
-                    {cat.name}
-                  </h4>
-                  <p className="text-xs text-slate-400 mt-1">{cat.subtitle}</p>
+                <div
+                  key={cat.id}
+                  className="p-5 rounded-2xl bg-gradient-to-b from-[#162442] to-[#0F182C] border-2 border-slate-800 hover:border-amber-400/40 transition-all shadow-lg"
+                >
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-base font-bold font-display" style={{ color: cat.accentColor }}>
+                      {cat.name}
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1">{cat.subtitle}</p>
                   <div className="mt-4 grid grid-cols-3 gap-2">
                     {catQs.map((q) => {
                       const used = classicAnswered[q.id];
@@ -1160,11 +1315,14 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                             soundEngine.playSelectTile();
                             setClassicActiveQ(q);
                             setClassicChosen(null);
+                            setClassicStealTurn(false);
+                            setClassicTimer(30);
+                            setClassicTimerRunning(true);
                           }}
-                          className={`py-3 rounded-lg font-mono-num font-bold text-sm border ${
+                          className={`py-3.5 rounded-xl font-mono-num font-extrabold text-base border-2 transition-all cursor-pointer ${
                             used
-                              ? 'bg-slate-950 border-slate-800 text-slate-600'
-                              : 'bg-slate-900 border-slate-700 text-white hover:border-amber-400'
+                              ? 'bg-slate-950/80 border-slate-800/80 text-slate-600 cursor-not-allowed'
+                              : 'bg-slate-950 border-amber-400/50 text-amber-300 hover:bg-amber-400 hover:text-slate-950 shadow-md'
                           }`}
                         >
                           {used ? '✓' : q.points}
@@ -1178,44 +1336,129 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
           </div>
 
           {classicActiveQ && (
-            <div className="p-6 rounded-2xl bg-slate-900 border border-amber-400/50 space-y-4">
-              <div className="flex items-center justify-between text-xs text-amber-400">
-                <span>سؤال بقيمة {classicActiveQ.points} نقطة</span>
-                <button onClick={() => setClassicActiveQ(null)} className="text-slate-400 hover:text-white">
-                  إغلاق ✕
-                </button>
+            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-[#17284A] to-[#0D1527] border-2 border-amber-400 shadow-2xl space-y-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-amber-400 text-slate-950 font-extrabold text-xs">
+                    سؤال بقيمة {classicActiveQ.points} نقطة {doubleCardActive ? '(مضاعف ×٢)' : ''}
+                  </span>
+                  <span className="text-xs font-bold text-sky-300">
+                    {classicStealTurn
+                      ? `🔥 فرصة سرقة النقاط لفريق: ${rivalTeam?.name}`
+                      : `🎤 السؤال موجه لفريق: ${activeTeam?.name}`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`px-4 py-1.5 rounded-full font-mono-num font-bold text-sm border ${
+                      classicTimer <= 10
+                        ? 'bg-rose-500/20 border-rose-400 text-rose-300'
+                        : 'bg-slate-950 border-amber-400/50 text-amber-300'
+                    }`}
+                  >
+                    ⏱️ ساعة الاستوديو: {classicTimer} ثانية
+                  </div>
+                  <button
+                    onClick={() => {
+                      setClassicActiveQ(null);
+                      setClassicTimerRunning(false);
+                    }}
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    إغلاق ✕
+                  </button>
+                </div>
               </div>
-              <h4 className="text-lg font-bold text-white">{classicActiveQ.question}</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <h4 className="text-xl sm:text-2xl font-bold text-white font-display leading-relaxed">
+                {classicActiveQ.question}
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 {classicActiveQ.options.map((opt, idx) => {
                   const isCorrect = idx === classicActiveQ.correctIndex;
                   const isChosen = classicChosen === idx;
-                  let cls = 'bg-slate-950 border-slate-700 text-white hover:border-amber-400';
+                  let cls =
+                    'bg-slate-950/90 border-slate-700 text-white hover:border-amber-400 hover:bg-slate-900';
                   if (classicChosen !== null) {
-                    if (isCorrect) cls = 'bg-emerald-500/20 border-emerald-400 text-emerald-200 font-bold';
-                    else if (isChosen) cls = 'bg-rose-500/20 border-rose-400 text-rose-200';
+                    if (isCorrect)
+                      cls = 'bg-emerald-500/25 border-emerald-400 text-emerald-200 font-bold';
+                    else if (isChosen) cls = 'bg-rose-500/25 border-rose-400 text-rose-200';
                   }
                   return (
                     <button
                       key={idx}
                       disabled={classicChosen !== null}
                       onClick={() => {
-                        setClassicChosen(idx);
-                        setClassicAnswered((prev) => ({ ...prev, [classicActiveQ.id]: true }));
+                        const targetTeam = classicStealTurn ? rivalTeamId : selectedTeamId;
                         if (isCorrect) {
+                          setClassicChosen(idx);
+                          setClassicTimerRunning(false);
+                          setClassicAnswered((prev) => ({ ...prev, [classicActiveQ.id]: true }));
                           soundEngine.playCorrect();
-                          awardWithMultiplier(selectedTeamId, classicActiveQ.points);
+                          awardWithMultiplier(targetTeam, classicActiveQ.points);
                         } else {
                           soundEngine.playWrong();
+                          if (!classicStealTurn) {
+                            // Offer steal opportunity to Rival Team just like Al-Abakera!
+                            setClassicStealTurn(true);
+                            setClassicTimer(15);
+                          } else {
+                            setClassicChosen(idx);
+                            setClassicTimerRunning(false);
+                            setClassicAnswered((prev) => ({ ...prev, [classicActiveQ.id]: true }));
+                          }
                         }
                       }}
-                      className={`p-3.5 rounded-xl border text-right text-sm ${cls}`}
+                      className={`p-4 rounded-2xl border-2 text-right text-sm sm:text-base transition-all cursor-pointer ${cls}`}
                     >
                       {opt}
                     </button>
                   );
                 })}
               </div>
+
+              {classicStealTurn && classicChosen === null && (
+                <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-400 text-amber-200 text-xs font-bold flex items-center justify-between">
+                  <span>
+                    ⚠️ أخطأ {activeTeam?.name}! انتقل السؤال الآن إلى {rivalTeam?.name} لسرقة النقاط خلال ١٥ ثانية!
+                  </span>
+                  <button
+                    onClick={() => {
+                      setClassicChosen(-1);
+                      setClassicTimerRunning(false);
+                      setClassicAnswered((prev) => ({ ...prev, [classicActiveQ.id]: true }));
+                    }}
+                    className="px-3 py-1 rounded bg-slate-900 text-slate-300 hover:text-white"
+                  >
+                    كشف الإجابة وإنهاء السؤال
+                  </button>
+                </div>
+              )}
+
+              {classicChosen !== null && (
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="text-xs text-slate-300">
+                    <strong className="text-amber-400">💡 معلومة العباقرة:</strong>{' '}
+                    {classicActiveQ.explanation}
+                  </div>
+                  <button
+                    onClick={() => {
+                      // Switch turn automatically to the other podium
+                      const temp = selectedTeamId;
+                      setSelectedTeamId(rivalTeamId);
+                      setRivalTeamId(temp);
+                      setClassicActiveQ(null);
+                      setClassicChosen(null);
+                      setClassicStealTurn(false);
+                    }}
+                    className="px-5 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs whitespace-nowrap cursor-pointer"
+                  >
+                    السؤال التالي وتبديل الدور للمنصة الأخرى ←
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
