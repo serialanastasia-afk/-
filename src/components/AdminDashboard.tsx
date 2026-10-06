@@ -1,0 +1,785 @@
+import React, { useState } from 'react';
+import {
+  Users,
+  Plus,
+  Trash2,
+  Download,
+  Settings,
+  CheckCircle2,
+  Sliders,
+  Shield,
+  BookOpen,
+  Play,
+  Square,
+  Crown,
+} from 'lucide-react';
+import {
+  StudentProfile,
+  Team,
+  QualifierQuestion,
+  CompetitionSettings,
+  MatchItem,
+  GradeNumber,
+  QualifierDomain,
+  DifficultyLevel,
+} from '../types/competition';
+import { DOMAIN_META } from '../data/qualifierQuestions';
+import { soundEngine } from '../utils/sound';
+
+interface AdminDashboardProps {
+  students: StudentProfile[];
+  setStudents: React.Dispatch<React.SetStateAction<StudentProfile[]>>;
+  teams: Team[];
+  setTeams: React.Dispatch<React.SetStateAction<Team[]>>;
+  customQuestions: QualifierQuestion[];
+  setCustomQuestions: React.Dispatch<React.SetStateAction<QualifierQuestion[]>>;
+  settings: CompetitionSettings;
+  setSettings: React.Dispatch<React.SetStateAction<CompetitionSettings>>;
+  matches: MatchItem[];
+  setMatches: React.Dispatch<React.SetStateAction<MatchItem[]>>;
+  onTriggerGeniusAlarm: () => void;
+}
+
+type AdminSection = 'students' | 'questions' | 'competition' | 'teams' | 'matches' | 'results';
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  students,
+  setStudents,
+  teams,
+  setTeams,
+  customQuestions,
+  setCustomQuestions,
+  settings,
+  setSettings,
+  matches,
+  setMatches,
+  onTriggerGeniusAlarm,
+}) => {
+  const [section, setSection] = useState<AdminSection>('students');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Add Student State
+  const [stuName, setStuName] = useState('');
+  const [stuGrade, setStuGrade] = useState<GradeNumber>('5');
+  const [stuClass, setStuClass] = useState('5 / أ');
+
+  // Add Question State
+  const [qText, setQText] = useState('');
+  const [qDomain, setQDomain] = useState<QualifierDomain>('science');
+  const [qDiff, setQDiff] = useState<DifficultyLevel>('medium');
+  const [qPoints, setQPoints] = useState(15);
+  const [qTime, setQTime] = useState(35);
+  const [qOpt0, setQOpt0] = useState('');
+  const [qOpt1, setQOpt1] = useState('');
+  const [qOpt2, setQOpt2] = useState('');
+  const [qOpt3, setQOpt3] = useState('');
+  const [qCorrect, setQCorrect] = useState(0);
+
+  // Add Team State
+  const [teamName, setTeamName] = useState('');
+  const [teamEmblem, setTeamEmblem] = useState('🦁');
+  const [teamColor, setTeamColor] = useState('#F59E0B');
+
+  const notify = (msg: string) => {
+    setToastMsg(msg);
+    soundEngine.playSelectTile();
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  // Export Results CSV
+  const handleExportCSV = () => {
+    const header = 'الاسم,الصف,الفصل,كود المشاركة,النقاط الكلية,السرعة,تأهل للنهائيات\n';
+    const rows = students
+      .map(
+        (s) =>
+          `"${s.name}",${s.grade},"${s.className}",${s.participationCode},${s.scores.total},${s.scores.speedScore},${
+            s.qualifiedForFinals ? 'نعم' : 'لا'
+          }`
+      )
+      .join('\n');
+    const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'oyoun_misr_geniuses_results.csv';
+    a.click();
+    notify('تم تصدير ملف نتائج طلاب مدرسة عيون مصر بصيغة CSV');
+  };
+
+  const filteredStudents = students.filter(
+    (s) =>
+      s.name.includes(searchQuery) ||
+      s.participationCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.className.includes(searchQuery)
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <span className="text-xs font-semibold text-amber-400">
+            🛠️ لوحة تحكم المشرف وإدارة البطولة — مدرسة عيون مصر
+          </span>
+          <h2 className="text-2xl font-bold text-white font-display mt-1">
+            الإدارة الكاملة للطلاب، الأسئلة، الفرق، المباريات، والإعدادات
+          </h2>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={onTriggerGeniusAlarm}
+            className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-500"
+          >
+            🚨 إطلاق إنذار العباقرة الآن
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 text-xs font-bold hover:bg-amber-300 flex items-center gap-1.5"
+          >
+            <Download className="w-4 h-4" />
+            <span>تصدير النتائج (CSV)</span>
+          </button>
+        </div>
+      </div>
+
+      {toastMsg && (
+        <div className="p-3.5 rounded-xl bg-emerald-500/20 border border-emerald-400 text-emerald-200 text-xs font-bold flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Sub-navigation Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {(
+          [
+            { id: 'students', label: '👨‍🎓 الطلاب والمتأهلون' },
+            { id: 'questions', label: '❓ بنك الأسئلة' },
+            { id: 'competition', label: '⚙️ إعدادات المسابقة والحماية' },
+            { id: 'teams', label: '🧩 إدارة الفرق والقادة' },
+            { id: 'matches', label: '⚔️ إدارة المباريات المباشرة' },
+            { id: 'results', label: '📊 التقارير والنتائج' },
+          ] as { id: AdminSection; label: string }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSection(tab.id)}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap border transition-all ${
+              section === tab.id
+                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                : 'bg-[#131F38] text-slate-300 border-slate-800 hover:text-white'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 1. STUDENTS SECTION */}
+      {section === 'students' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-4 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+            <h3 className="text-base font-bold text-white font-display">إضافة طالب جديد</h3>
+            <input
+              type="text"
+              value={stuName}
+              onChange={(e) => setStuName(e.target.value)}
+              placeholder="اسم الطالب الثلاثي"
+              className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={stuGrade}
+                onChange={(e) => setStuGrade(e.target.value as GradeNumber)}
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              >
+                <option value="4">الصف الرابع</option>
+                <option value="5">الصف الخامس</option>
+                <option value="6">الصف السادس</option>
+              </select>
+              <input
+                type="text"
+                value={stuClass}
+                onChange={(e) => setStuClass(e.target.value)}
+                placeholder="الفصل (5 / أ)"
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <button
+              onClick={() => {
+                if (!stuName.trim()) return;
+                const code = `OM-${stuGrade}${Math.floor(100 + Math.random() * 899)}`;
+                const newS: StudentProfile = {
+                  id: `stu-${Date.now()}`,
+                  name: stuName.trim(),
+                  grade: stuGrade,
+                  className: stuClass,
+                  participationCode: code,
+                  completedQualifier: false,
+                  scores: {
+                    total: 0,
+                    speedScore: 0,
+                    logic: 0,
+                    science: 0,
+                    arabic: 0,
+                    observation: 0,
+                    math: 0,
+                    egypt_world: 0,
+                    general_culture: 0,
+                    technology: 0,
+                  },
+                  qualifiedForFinals: false,
+                  badges: [],
+                };
+                setStudents((prev) => [newS, ...prev]);
+                setStuName('');
+                notify(`تم تسجيل الطالب وإصدار الكود: ${code}`);
+              }}
+              className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+            >
+              + إضافة الطالب وتوليد كود المشاركة
+            </button>
+          </div>
+
+          <div className="lg:col-span-8 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-base font-bold text-white font-display">
+                سجل الطلاب المسجلين ({filteredStudents.length})
+              </h3>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="بحث بالاسم أو الكود أو الفصل..."
+                className="px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white w-64"
+              />
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="text-slate-400 border-b border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">الاسم</th>
+                    <th className="py-2.5 px-3">الصف/الفصل</th>
+                    <th className="py-2.5 px-3">الكود</th>
+                    <th className="py-2.5 px-3">مجموع التصفيات</th>
+                    <th className="py-2.5 px-3">التأهل للنهائي</th>
+                    <th className="py-2.5 px-3">إجراء</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredStudents.map((s) => (
+                    <tr key={s.id}>
+                      <td className="py-3 px-3 font-bold text-white">{s.name}</td>
+                      <td className="py-3 px-3 text-slate-300">
+                        الصف {s.grade} ({s.className})
+                      </td>
+                      <td className="py-3 px-3 font-mono-num text-amber-400 font-bold">
+                        {s.participationCode}
+                      </td>
+                      <td className="py-3 px-3 font-mono-num text-emerald-400 font-bold">
+                        {s.scores.total} نقطة
+                      </td>
+                      <td className="py-3 px-3">
+                        <button
+                          onClick={() => {
+                            setStudents((prev) =>
+                              prev.map((item) =>
+                                item.id === s.id
+                                  ? { ...item, qualifiedForFinals: !item.qualifiedForFinals }
+                                  : item
+                              )
+                            );
+                          }}
+                          className={`px-2.5 py-1 rounded-md text-[11px] font-bold ${
+                            s.qualifiedForFinals
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : 'bg-slate-900 text-slate-400 border border-slate-700'
+                          }`}
+                        >
+                          {s.qualifiedForFinals ? '✓ متأهل' : 'غير متأهل'}
+                        </button>
+                      </td>
+                      <td className="py-3 px-3">
+                        <button
+                          onClick={() =>
+                            setStudents((prev) => prev.filter((item) => item.id !== s.id))
+                          }
+                          className="text-rose-400 hover:text-rose-300"
+                        >
+                          حذف
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. QUESTIONS SECTION */}
+      {section === 'questions' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
+            <h3 className="text-base font-bold text-white font-display">إضافة سؤال جديد</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">المجال</label>
+                <select
+                  value={qDomain}
+                  onChange={(e) => setQDomain(e.target.value as QualifierDomain)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                >
+                  {(Object.keys(DOMAIN_META) as QualifierDomain[]).map((k) => (
+                    <option key={k} value={k}>
+                      {DOMAIN_META[k].label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">الصعوبة</label>
+                <select
+                  value={qDiff}
+                  onChange={(e) => setQDiff(e.target.value as DifficultyLevel)}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                >
+                  <option value="easy">🟢 سهل</option>
+                  <option value="medium">🟡 متوسط</option>
+                  <option value="hard">🔴 صعب</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">النقاط</label>
+                <input
+                  type="number"
+                  value={qPoints}
+                  onChange={(e) => setQPoints(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">الوقت (ثانية)</label>
+                <input
+                  type="number"
+                  value={qTime}
+                  onChange={(e) => setQTime(Number(e.target.value))}
+                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+            </div>
+
+            <textarea
+              rows={2}
+              value={qText}
+              onChange={(e) => setQText(e.target.value)}
+              placeholder="نص السؤال..."
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={qOpt0}
+                onChange={(e) => setQOpt0(e.target.value)}
+                placeholder="الاختيار 1"
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+              <input
+                type="text"
+                value={qOpt1}
+                onChange={(e) => setQOpt1(e.target.value)}
+                placeholder="الاختيار 2"
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+              <input
+                type="text"
+                value={qOpt2}
+                onChange={(e) => setQOpt2(e.target.value)}
+                placeholder="الاختيار 3"
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+              <input
+                type="text"
+                value={qOpt3}
+                onChange={(e) => setQOpt3(e.target.value)}
+                placeholder="الاختيار 4"
+                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+
+            <select
+              value={qCorrect}
+              onChange={(e) => setQCorrect(Number(e.target.value))}
+              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+            >
+              <option value={0}>الإجابة الصحيحة: الاختيار 1</option>
+              <option value={1}>الإجابة الصحيحة: الاختيار 2</option>
+              <option value={2}>الإجابة الصحيحة: الاختيار 3</option>
+              <option value={3}>الإجابة الصحيحة: الاختيار 4</option>
+            </select>
+
+            <button
+              onClick={() => {
+                if (!qText.trim() || !qOpt0.trim() || !qOpt1.trim()) return;
+                const newQ: QualifierQuestion = {
+                  id: `cust-${Date.now()}`,
+                  domain: qDomain,
+                  difficulty: qDiff,
+                  grade: 'all',
+                  question: qText.trim(),
+                  options: [
+                    qOpt0.trim(),
+                    qOpt1.trim(),
+                    qOpt2.trim() || 'اختيار ثالث',
+                    qOpt3.trim() || 'اختيار رابع',
+                  ],
+                  correctIndex: qCorrect,
+                  points: qPoints,
+                  timeSeconds: qTime,
+                };
+                setCustomQuestions((prev) => [newQ, ...prev]);
+                setQText('');
+                setQOpt0('');
+                setQOpt1('');
+                setQOpt2('');
+                setQOpt3('');
+                notify('تمت إضافة السؤال بنجاح إلى بنك الأسئلة!');
+              }}
+              className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+            >
+              + حفظ السؤال في بنك المسابقة
+            </button>
+          </div>
+
+          <div className="lg:col-span-7 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
+            <h3 className="text-base font-bold text-white font-display">
+              الأسئلة المضافة من المشرف ({customQuestions.length}) + 50 سؤالاً أساسياً معتمداً
+            </h3>
+            {customQuestions.length === 0 ? (
+              <p className="text-xs text-slate-400 py-8 text-center">
+                النظام يعمل حالياً بـ ٥٠ سؤالاً أساسياً موزعاً على الـ٨ مجالات. أي سؤال تضيفه هنا سيظهر فوراً!
+              </p>
+            ) : (
+              <div className="space-y-2.5 max-h-96 overflow-y-auto">
+                {customQuestions.map((q) => (
+                  <div
+                    key={q.id}
+                    className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <span className="text-[11px] text-amber-400">
+                        {DOMAIN_META[q.domain].label} · {q.points} نقطة
+                      </span>
+                      <div className="text-xs font-bold text-white mt-0.5">{q.question}</div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        setCustomQuestions((prev) => prev.filter((item) => item.id !== q.id))
+                      }
+                      className="text-xs text-rose-400 hover:underline"
+                    >
+                      حذف
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 3. COMPETITION SETTINGS & ANTI-CHEAT */}
+      {section === 'competition' && (
+        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-6">
+          <h3 className="text-lg font-bold text-white font-display">
+            ⚙️ إعدادات المسابقة وإجراءات الحماية وتقليل الغش
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 text-xs">
+            <div>
+              <label className="block text-slate-400 mb-1">تاريخ البداية</label>
+              <input
+                type="date"
+                value={settings.startDate}
+                onChange={(e) => setSettings({ ...settings, startDate: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-400 mb-1">تاريخ النهاية</label>
+              <input
+                type="date"
+                value={settings.endDate}
+                onChange={(e) => setSettings({ ...settings, endDate: e.target.value })}
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-400 mb-1">مدة اختبار التصفيات (بالدقائق)</label>
+              <input
+                type="number"
+                value={settings.qualifierDurationMinutes}
+                onChange={(e) =>
+                  setSettings({ ...settings, qualifierDurationMinutes: Number(e.target.value) })
+                }
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-slate-400 mb-1">عدد الفرق في شجرة البطولة النهائية</label>
+              <select
+                value={settings.tournamentBracketSize}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    tournamentBracketSize: Number(e.target.value) as 16 | 8 | 4 | 2,
+                  })
+                }
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white"
+              >
+                <option value={16}>16 فريقاً (دور الـ16)</option>
+                <option value={8}>8 فرق (ربع النهائي)</option>
+                <option value={4}>4 فرق (نصف النهائي)</option>
+                <option value={2}>فريقان (المباراة النهائية مباشرة)</option>
+              </select>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <span>إغلاق الرجوع للأسئلة السابقة في التصفيات</span>
+              <input
+                type="checkbox"
+                checked={!settings.allowBackNavigationInQualifier}
+                onChange={(e) =>
+                  setSettings({ ...settings, allowBackNavigationInQualifier: !e.target.checked })
+                }
+                className="w-4 h-4 accent-amber-400"
+              />
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <span>تفعيل خصم النقاط عند الخطأ في تحدي المخاطرة</span>
+              <input
+                type="checkbox"
+                checked={settings.enableRiskPenalty}
+                onChange={(e) => setSettings({ ...settings, enableRiskPenalty: e.target.checked })}
+                className="w-4 h-4 accent-amber-400"
+              />
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+              <span>عرض لوحة الأبطال للجمهور أثناء التصفيات</span>
+              <input
+                type="checkbox"
+                checked={settings.showResultsDuringQualifiers}
+                onChange={(e) =>
+                  setSettings({ ...settings, showResultsDuringQualifiers: e.target.checked })
+                }
+                className="w-4 h-4 accent-amber-400"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. TEAMS MANAGEMENT */}
+      {section === 'teams' && (
+        <div className="space-y-6">
+          <div className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">اسم الفريق الجديد</label>
+              <input
+                type="text"
+                value={teamName}
+                onChange={(e) => setTeamName(e.target.value)}
+                placeholder="مثال: 🦁 فريق أسود عيون مصر"
+                className="px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">الشعار</label>
+              <input
+                type="text"
+                value={teamEmblem}
+                onChange={(e) => setTeamEmblem(e.target.value)}
+                className="w-20 px-3 py-2 text-center text-sm bg-slate-950 border border-slate-700 rounded-xl text-white"
+              />
+            </div>
+            <button
+              onClick={() => {
+                if (!teamName.trim()) return;
+                const newTeam: Team = {
+                  id: `team-${Date.now()}`,
+                  name: teamName.trim(),
+                  emblem: teamEmblem,
+                  color: teamColor,
+                  captainId: 'cap-1',
+                  points: 100,
+                  wins: 0,
+                  matchesPlayed: 0,
+                  titleBadge: '🌟 نجم المسابقة',
+                  cards: { challengeCard: true, swapQuestionCard: true, doublePointsCard: true },
+                  members: [
+                    { id: 'cap-1', name: 'قائد الفريق الأول', grade: '6' },
+                    { id: 'mem-2', name: 'عضو الفريق الثاني', grade: '5' },
+                    { id: 'mem-3', name: 'عضو الفريق الثالث', grade: '5' },
+                    { id: 'mem-4', name: 'عضو الفريق الرابع', grade: '4' },
+                    { id: 'mem-5', name: 'لاعب احتياطي', grade: '4', isReserve: true },
+                  ],
+                };
+                setTeams((prev) => [...prev, newTeam]);
+                setTeamName('');
+                notify('تم إنشاء الفريق بنجاح!');
+              }}
+              className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+            >
+              + إنشاء فريق جديد
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {teams.map((t) => (
+              <div key={t.id} className="p-5 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-bold text-white font-display">{t.name}</h4>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono-num text-amber-400 font-bold">{t.points} نقطة</span>
+                    <button
+                      onClick={() =>
+                        setTeams((prev) =>
+                          prev.map((item) =>
+                            item.id === t.id
+                              ? {
+                                  ...item,
+                                  cards: {
+                                    challengeCard: true,
+                                    swapQuestionCard: true,
+                                    doublePointsCard: true,
+                                  },
+                                }
+                              : item
+                          )
+                        )
+                      }
+                      className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] text-sky-300"
+                    >
+                      إعادة شحن الكروت 🃏
+                    </button>
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-400">
+                  تعيين قائد الفريق (اضغط على اسم الطالب لتعيينه قائداً 🎤):
+                </div>
+                <div className="space-y-1.5">
+                  {t.members.map((m) => {
+                    const isCapt = t.captainId === m.id;
+                    return (
+                      <div
+                        key={m.id}
+                        className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs"
+                      >
+                        <span className="text-white font-medium">
+                          {m.name} (صف {m.grade}) {m.isReserve ? '· احتياطي' : ''}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setTeams((prev) =>
+                              prev.map((item) =>
+                                item.id === t.id ? { ...item, captainId: m.id } : item
+                              )
+                            );
+                            notify(`تم تعيين ${m.name} قائداً لـ ${t.name}`);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg font-semibold ${
+                            isCapt
+                              ? 'bg-amber-400 text-slate-950'
+                              : 'bg-slate-950 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {isCapt ? '🎤 القائد الحالي' : 'تعيين كقائد'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 5. LIVE MATCHES CONTROL */}
+      {section === 'matches' && (
+        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+          <h3 className="text-lg font-bold text-white font-display">⚔️ إدارة المباريات وتعديل النقاط المباشرة</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {teams.map((t) => (
+              <div
+                key={t.id}
+                className="p-4 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between"
+              >
+                <div>
+                  <div className="font-bold text-white">{t.name}</div>
+                  <div className="text-xs text-slate-400">الانتصارات: {t.wins}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      setTeams((prev) =>
+                        prev.map((item) =>
+                          item.id === t.id ? { ...item, points: Math.max(0, item.points - 10) } : item
+                        )
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 font-mono-num font-bold text-xs"
+                  >
+                    -10
+                  </button>
+                  <span className="font-mono-num text-lg font-bold text-amber-400 px-2">
+                    {t.points}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setTeams((prev) =>
+                        prev.map((item) =>
+                          item.id === t.id ? { ...item, points: item.points + 10 } : item
+                        )
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-mono-num font-bold text-xs"
+                  >
+                    +10
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 6. RESULTS OVERVIEW */}
+      {section === 'results' && (
+        <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-white font-display">📊 ملخص نتائج الفرق والطلاب</h3>
+            <button
+              onClick={handleExportCSV}
+              className="px-4 py-2 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
+            >
+              تصدير جدول النتائج CSV
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">
+            يتم حفظ جميع تعديلات المشرف والأسئلة والنتائج محلياً في المتصفح بشكل فوري لتعمل المنصة بكامل طاقتها في قاعة المدرسة.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
