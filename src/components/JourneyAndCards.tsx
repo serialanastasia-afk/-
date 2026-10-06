@@ -696,16 +696,37 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {builderPlayers.slice(0, builderSize).map((pl, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2"
-                >
-                  <div className="text-[11px] font-bold text-amber-300">
-                    {idx === 0
-                      ? '👑 اللاعب ١ (قائد الفريق)'
-                      : idx === 4
-                      ? '🌟 اللاعب ٥ (اللاعب الخامس)'
-                      : `🎙️ اللاعب ${idx + 1}`}
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-amber-300">
+                      {idx === 0
+                        ? '👑 اللاعب ١ (قائد الفريق)'
+                        : idx === 4
+                        ? '🌟 اللاعب ٥ (اللاعب الخامس)'
+                        : `🎙️ اللاعب ${idx + 1}`}
+                    </span>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        const found = students.find((s) => s.id === e.target.value);
+                        if (!found) return;
+                        const next = [...builderPlayers];
+                        next[idx] = {
+                          ...next[idx],
+                          name: found.name,
+                          grade: found.grade,
+                        };
+                        setBuilderPlayers(next);
+                      }}
+                      className="text-[10px] bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-amber-300"
+                    >
+                      <option value="">اختر من الطلاب المسجلين...</option>
+                      {students.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} (صف {s.grade})
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
@@ -1124,6 +1145,65 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                 </div>
               );
             })}
+          </div>
+
+          {/* Individual Champions Ranking Section (🏆 أبطال النظام الفردي) */}
+          <div className="p-6 rounded-2xl bg-[#131F38] border border-emerald-400/40 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-xs font-bold text-emerald-400">
+                  👤 ترتيب أبطال النظام الفردي (Individual Champions)
+                </span>
+                <h3 className="text-lg font-bold text-white font-display mt-0.5">
+                  أعلى الطلاب نقاطاً في المنافسات والتصفيات الفردية
+                </h3>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[...students]
+                .sort((a, b) => b.scores.total - a.scores.total)
+                .slice(0, 8)
+                .map((stu, sIdx) => (
+                  <div
+                    key={stu.id}
+                    className={`p-4 rounded-xl border flex flex-col justify-between ${
+                      sIdx === 0
+                        ? 'bg-emerald-950/30 border-emerald-400 shadow-lg'
+                        : 'bg-slate-900/90 border-slate-800'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="font-bold text-amber-400">
+                          {sIdx === 0
+                            ? '🥇 الأول فردي'
+                            : sIdx === 1
+                            ? '🥈 الثاني فردي'
+                            : sIdx === 2
+                            ? '🥉 الثالث فردي'
+                            : `المركز #${sIdx + 1}`}
+                        </span>
+                        <span className="font-mono-num text-[11px] text-slate-400">
+                          {stu.participationCode}
+                        </span>
+                      </div>
+                      <div className="text-base font-bold text-white font-display">
+                        {stu.name}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        الصف {stu.grade} الابتدائي · فصل {stu.className}
+                      </div>
+                    </div>
+                    <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
+                      <span className="text-xs text-slate-400">النقاط الفردية:</span>
+                      <span className="text-lg font-extrabold font-mono-num text-emerald-400">
+                        {stu.scores.total} نقطة
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
 
           {/* ==================== 📈 RECHARTS TEAM ANALYTICS & PROGRESS SECTION ==================== */}

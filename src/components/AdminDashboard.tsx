@@ -12,6 +12,8 @@ import {
   Play,
   Square,
   Crown,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import {
   StudentProfile,
@@ -25,6 +27,7 @@ import {
   CompetitionAward,
 } from '../types/competition';
 import { DOMAIN_META } from '../data/qualifierQuestions';
+import { APP_PROFILE_PRESETS } from '../data/challengesData';
 import { soundEngine } from '../utils/sound';
 
 interface AdminDashboardProps {
@@ -523,6 +526,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* 3. COMPETITION SETTINGS & ANTI-CHEAT */}
       {section === 'competition' && (
         <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-6">
+          {/* App Profile Image Picker in Admin Settings */}
+          <div className="p-5 rounded-2xl bg-slate-950/90 border border-amber-400/40 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <img
+                  src={settings.appProfileImage || APP_PROFILE_PRESETS[0].url}
+                  alt="صورة بروفيل التطبيق"
+                  referrerPolicy="no-referrer"
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400 shrink-0"
+                />
+                <div>
+                  <h4 className="text-base font-bold text-white font-display flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-amber-400" />
+                    <span>صورة بروفيل التطبيق وشعار البطولة الرسمي</span>
+                  </h4>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    اختر من الشعارات الملكية الجاهزة أو ارفع شعار مدرستك الخاص من جهازك ليظهر في كافة صفحات التطبيق:
+                  </p>
+                </div>
+              </div>
+
+              <label className="px-4 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs hover:bg-amber-300 cursor-pointer flex items-center gap-2">
+                <Upload className="w-4 h-4" />
+                <span>رفع صورة من جهازك</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      if (typeof reader.result === 'string') {
+                        setSettings({ ...settings, appProfileImage: reader.result as string });
+                        notify('تم تغيير صورة بروفيل التطبيق بنجاح!');
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+              {APP_PROFILE_PRESETS.map((preset) => {
+                const isSelected =
+                  (settings.appProfileImage || APP_PROFILE_PRESETS[0].url) === preset.url;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => {
+                      setSettings({ ...settings, appProfileImage: preset.url });
+                      notify(`تم اعتماد: ${preset.name}`);
+                    }}
+                    className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                      isSelected
+                        ? 'bg-amber-400/20 border-amber-400 text-amber-300'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <img
+                      src={preset.url}
+                      alt={preset.name}
+                      referrerPolicy="no-referrer"
+                      className="w-14 h-14 rounded-xl object-cover border border-slate-700"
+                    />
+                    <span className="text-[11px] font-bold">{preset.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <h3 className="text-lg font-bold text-white font-display">
             ⚙️ إعدادات المسابقة وإجراءات الحماية وتقليل الغش
           </h3>

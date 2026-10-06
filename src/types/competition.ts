@@ -129,6 +129,7 @@ export interface CompetitionAward {
 }
 
 export interface CompetitionSettings {
+  appProfileImage?: string;
   startDate: string;
   endDate: string;
   qualifierDurationMinutes: number;

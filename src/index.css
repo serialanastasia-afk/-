@@ -162,6 +162,76 @@
   background: var(--ink-faint);
 }
 
+/* ==================== 🗳️ LIVE TEAM VOTING & CONSENSUS VISUAL EFFECTS ==================== */
+@keyframes vote-border-pulse {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.85);
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.45), inset 0 0 18px rgba(245, 158, 11, 0.12);
+  }
+  50% {
+    border-color: rgba(56, 189, 248, 0.95);
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0), inset 0 0 28px rgba(56, 189, 248, 0.22);
+  }
+}
+
+@keyframes vote-flash-burst {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.9), 0 0 30px rgba(251, 191, 36, 0.75);
+    background-color: rgba(245, 158, 11, 0.38);
+  }
+  45% {
+    transform: scale(1.025);
+    box-shadow: 0 0 0 10px rgba(251, 191, 36, 0), 0 0 40px rgba(52, 211, 153, 0.65);
+    background-color: rgba(16, 185, 129, 0.28);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes unanimous-emerald-glow {
+  0%, 100% {
+    border-color: rgba(52, 211, 153, 0.95);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35), inset 0 0 15px rgba(16, 185, 129, 0.15);
+  }
+  50% {
+    border-color: rgba(250, 204, 21, 0.95);
+    box-shadow: 0 0 32px rgba(250, 204, 21, 0.5), inset 0 0 24px rgba(250, 204, 21, 0.22);
+  }
+}
+
+@keyframes border-march {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.vote-option-active {
+  animation: vote-border-pulse 1.6s infinite ease-in-out;
+}
+
+.vote-option-just-picked {
+  animation: vote-flash-burst 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.vote-option-unanimous {
+  animation: unanimous-emerald-glow 1.4s infinite ease-in-out;
+}
+
+.vote-animated-frame {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.22), rgba(56, 189, 248, 0.18), rgba(16, 185, 129, 0.22), rgba(245, 158, 11, 0.22));
+  background-size: 300% 300%;
+  animation: border-march 3s ease infinite;
+}
+
 @media print {
   body {
     background-color: #FFFFFF !important;

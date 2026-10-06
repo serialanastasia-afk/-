@@ -1,4 +1,39 @@
 import { JourneyNode, StudentProfile, Team, MatchItem, CompetitionSettings, CompetitionAward } from '../types/competition';
+import abakeraOyounMisrProfile from '../assets/images/abakera_oyoun_misr_profile_1791291145794.jpg';
+import abakeraOyounMisrBanner from '../assets/images/abakera_oyoun_misr_banner_1791291132965.jpg';
+import appProfileGoldLogo from '../assets/images/app_profile_logo_gold_1791290529640.jpg';
+import appProfileFalconCrest from '../assets/images/app_profile_falcon_crest_1791290541065.jpg';
+import schoolCrestEmblem from '../assets/images/school_crest_emblem_1791274256508.jpg';
+
+export const OFFICIAL_HERO_BANNER = abakeraOyounMisrBanner;
+
+export const APP_PROFILE_PRESETS = [
+  {
+    id: 'preset-official-kids',
+    name: 'بروفيل عباقرة عيون مصر الرسمي (الأبطال الأربعة)',
+    url: abakeraOyounMisrProfile,
+  },
+  {
+    id: 'preset-official-banner',
+    name: 'البانر الكامل لعباقرة عيون مصر',
+    url: abakeraOyounMisrBanner,
+  },
+  {
+    id: 'preset-gold-logo',
+    name: 'شعار العباقرة الذهبي الملكي',
+    url: appProfileGoldLogo,
+  },
+  {
+    id: 'preset-falcon-crest',
+    name: 'درع صقر عيون مصر المتوّج',
+    url: appProfileFalconCrest,
+  },
+  {
+    id: 'preset-school-crest',
+    name: 'وسام مدرسة عيون مصر الكلاسيكي',
+    url: schoolCrestEmblem,
+  },
+];
 
 // 🧭 خريطة رحلة العباقرة التفاعلية (9 محطات)
 export const JOURNEY_NODES: JourneyNode[] = [
@@ -167,7 +202,7 @@ export const LIGHTNING_QUESTIONS: LightningQuestion[] = [
   },
   {
     id: 'lt-4',
-    prompt: '🔢 حساب خاطف: أكمل النمط السريع:  10  →  20  →  30  →  40  →  ؟',
+    prompt: '🔢 Quick Math (English): Complete the pattern:  10  →  20  →  30  →  40  →  ... ?',
     options: ['50', '45', '60', '55'],
     correctIndex: 0,
     basePoints: 20,
@@ -269,18 +304,18 @@ export const MYSTERY_FACT_CHALLENGES: MysteryFactChallenge[] = [
   },
   {
     id: 'mf-3',
-    title: 'زهرة اللوتس المصرية والأسطح النظيفة 🌸',
+    title: '🔬 Science Mystery: The Lotus Leaf Effect 🌸',
     factCard:
-      'أوراق زهرة اللوتس المصرية مغطاة بطبقة شمعية طبيعية تجعل قطرات الماء تتدحرج فوقها وتأخذ معها ذرات الغبار، فتبقى الورقة نظيفة دائماً.',
-    question: 'كيف استفاد المهندسون من ملاحظة ورقة اللوتس في حياتنا اليومية؟',
+      'The leaves of the Egyptian Lotus flower are covered with a natural waxy layer. When water droplets fall on the leaf, they roll off and carry away dust particles, keeping the leaf clean and dry all the time!',
+    question: 'How did scientists and engineers use this "Lotus Effect" in everyday life?',
     options: [
-      'صنعوا دهانات وزجاجاً وملابس لا يلتصق بها الماء أو التراب وتنظف نفسها بسهولة',
-      'صنعوا ورقاً يذوب في الماء فوراً',
-      'صنعوا إطارات سيارات ثقيلة',
-      'قللوا من زراعة الزهور في الحدائق',
+      'They invented self-cleaning paints, glass, and waterproof fabrics that repel water and dirt',
+      'They made paper that dissolves in water immediately',
+      'They stopped planting flowers in gardens',
+      'They made heavy iron tires',
     ],
     correctIndex: 0,
-    explanation: 'تقليد الطبيعة يساعد العلماء والمهندسين على ابتكار منتجات ذكية ومفيدة للإنسان.',
+    explanation: 'Biomimicry (learning from nature) helped engineers design self-cleaning surfaces inspired by the lotus leaf.',
     points: 30,
   },
 ];
@@ -322,10 +357,10 @@ export const RISK_QUESTIONS: RiskQuestion[] = [
   {
     id: 'rk-50',
     tier: 50,
-    question: 'مخاطرة 50 نقطة (🔥 تحدي الأبطال - ذكاء وحساب): إذا كانت الساعة تشير إلى 3:00 تماماً، فما نوع الزاوية المتكونة بين عقرب الساعات وعقرب الدقائق؟',
-    options: ['زاوية قائمة (90 درجة)', 'زاوية مستقيمة (180 درجة)', 'زاوية منفرجة', 'زاوية صفرية'],
+    question: '🔥 50-Point Risk (Math & Geometry): When the clock shows exactly 3:00, what type of angle is formed between the hour hand and the minute hand?',
+    options: ['Right angle (90°)', 'Straight angle (180°)', 'Obtuse angle (120°)', 'Zero angle (0°)'],
     correctIndex: 0,
-    explanation: 'عند الساعة الثالثة تماماً يتعامد العقربان فيشكلان زاوية قائمة قياسها 90 درجة.',
+    explanation: 'At 3:00, the hour and minute hands are perpendicular, forming a Right Angle (90 degrees).',
   },
 ];
 
@@ -462,11 +497,11 @@ export const ESCAPE_ROOM_STAGES = [
 export const GENIUS_ALARM_QUESTIONS = [
   {
     id: 'alm-1',
-    title: '🚨 إنذار العباقرة: تحدي النقاط المضاعفة لجميع الفرق!',
-    type: 'لغز تركيز وحساب سريع',
+    title: '🚨 Genius Alarm (Mental Math Challenge in English)!',
+    type: 'Mental Math & Focus',
     question:
-      'انطلقت حافلة مدرسة عيون مصر وفيها 18 طالباً. في المحطة الأولى نزل 5 طلاب وصعد 7 طلاب، وفي المحطة الثانية صعد 4 طلاب. كم طالباً في الحافلة الآن؟',
-    options: ['24 طالباً', '20 طالباً', '22 طالباً', '26 طالباً'],
+      '🚌 An Oyoun Misr school bus started with 18 students. At the first stop, 5 students got off and 7 got on. At the second stop, 4 more students got on. How many students are on the bus now?',
+    options: ['24 students', '20 students', '22 students', '26 students'],
     correctIndex: 0,
     doublePoints: 40,
   },
@@ -773,6 +808,7 @@ export const INITIAL_DEMO_TEAMS: Team[] = [
 ];
 
 export const INITIAL_SETTINGS: CompetitionSettings = {
+  appProfileImage: abakeraOyounMisrProfile,
   startDate: '2026-10-10',
   endDate: '2026-10-25',
   qualifierDurationMinutes: 30,

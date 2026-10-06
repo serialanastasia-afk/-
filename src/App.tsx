@@ -4,6 +4,8 @@ import {
   Siren,
   Volume2,
   VolumeX,
+  Camera,
+  Upload,
 } from 'lucide-react';
 import {
   AppView,
@@ -23,6 +25,8 @@ import {
   GENIUS_ALARM_QUESTIONS,
   OFFICIAL_AWARDS,
   JOURNEY_NODES,
+  APP_PROFILE_PRESETS,
+  OFFICIAL_HERO_BANNER,
 } from './data/challengesData';
 import { QualifiersAndPractice } from './components/QualifiersAndPractice';
 import { GamesArenaHub } from './components/GamesArenaHub';
@@ -37,7 +41,7 @@ import { soundEngine } from './utils/sound';
 
 const STORAGE_STUDENTS = 'om_geniuses_students_v2';
 const STORAGE_TEAMS = 'om_geniuses_teams_v2';
-const STORAGE_SETTINGS = 'om_geniuses_settings_v2';
+const STORAGE_SETTINGS = 'om_geniuses_settings_v3';
 const STORAGE_CUSTOM_QS = 'om_geniuses_custom_qs_v2';
 const STORAGE_AWARDS = 'om_geniuses_awards_v2';
 
@@ -126,6 +130,18 @@ export default function App() {
   const [alarmSelectedOpt, setAlarmSelectedOpt] = useState<number | null>(null);
   const [alarmWinnerTeamId, setAlarmWinnerTeamId] = useState<string>(teams[0]?.id || 'team-nile');
 
+  // 🖼️ App Profile Image Modal State
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const currentAppAvatar = settings.appProfileImage || APP_PROFILE_PRESETS[0].url;
+
+  useEffect(() => {
+    // Dynamically update browser tab favicon when app profile image changes
+    const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement | null;
+    if (link && currentAppAvatar) {
+      link.href = currentAppAvatar;
+    }
+  }, [currentAppAvatar]);
+
   useEffect(() => {
     soundEngine.enabled = soundEnabled;
   }, [soundEnabled]);
@@ -174,6 +190,22 @@ export default function App() {
     );
   };
 
+  const handleAwardStudentPoints = (studentId: string, delta: number) => {
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === studentId
+          ? {
+              ...s,
+              scores: {
+                ...s.scores,
+                total: Math.max(0, s.scores.total + delta),
+              },
+            }
+          : s
+      )
+    );
+  };
+
   const handleUseTeamCard = (
     teamId: string,
     cardKey: 'challengeCard' | 'swapQuestionCard' | 'doublePointsCard'
@@ -196,12 +228,36 @@ export default function App() {
   return (
     <div className="app-shell bg-[#0f0f12] text-[#f2efeb]">
       {/* ==================== ROW 1: LUXURY HEADER (Variation 2) ==================== */}
-      <header className="px-6 sm:px-12 py-6 flex justify-between items-center border-b-[1.5px] border-[#f2efeb] no-print">
-        <div
-          onClick={() => setCurrentView('home')}
-          className="font-syne text-2xl font-extrabold tracking-[-0.04em] text-[#d4af37] cursor-pointer"
-        >
-          OYOUN MISR
+      <header className="px-6 sm:px-12 py-5 flex justify-between items-center border-b-[1.5px] border-[#f2efeb] no-print">
+        <div className="flex items-center gap-3.5">
+          {/* App Profile Avatar with Quick Change Button */}
+          <div
+            onClick={() => setProfileModalOpen(true)}
+            title="اضغط لتغيير صورة بروفيل التطبيق"
+            className="relative group w-12 h-12 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-lg cursor-pointer shrink-0 bg-[#141418]"
+          >
+            <img
+              src={currentAppAvatar}
+              alt="صورة بروفيل تطبيق عباقرة عيون مصر"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+            />
+            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Camera className="w-4 h-4 text-[#d4af37]" />
+            </div>
+          </div>
+
+          <div
+            onClick={() => setCurrentView('home')}
+            className="cursor-pointer"
+          >
+            <div className="font-syne text-xl sm:text-2xl font-extrabold tracking-[-0.04em] text-[#d4af37] leading-none">
+              OYOUN MISR
+            </div>
+            <div className="text-[11px] text-[rgba(242,239,235,0.65)] font-bold mt-0.5">
+              عباقرة مدرسة عيون مصر
+            </div>
+          </div>
         </div>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -232,7 +288,15 @@ export default function App() {
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setProfileModalOpen(true)}
+            title="تغيير صورة بروفيل التطبيق"
+            className="px-3 py-1.5 rounded-full border border-[rgba(242,239,235,0.25)] text-[rgba(242,239,235,0.85)] hover:text-[#d4af37] hover:border-[#d4af37] transition-colors cursor-pointer text-xs font-bold flex items-center gap-1.5"
+          >
+            <Camera className="w-3.5 h-3.5 text-[#d4af37]" />
+            <span className="hidden sm:inline">صورة التطبيق</span>
+          </button>
           <button
             onClick={() => setSoundEnabled(!soundEnabled)}
             title={soundEnabled ? 'كتم الصوت' : 'تشغيل الصوت'}
@@ -286,7 +350,33 @@ export default function App() {
         <main className="grid grid-cols-1 lg:grid-cols-[1.45fr_1fr] gap-8 p-6 sm:p-12 overflow-y-auto items-center">
           {/* Left/Right Column 1: Hero Editorial Section */}
           <section className="flex flex-col justify-center">
-            <span className="label mb-3">Primary Competition 2026 · Grades 4, 5 & 6</span>
+            <div className="flex items-center gap-4 mb-5">
+              <div
+                onClick={() => setProfileModalOpen(true)}
+                className="relative group w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border-2 border-[#d4af37] shadow-2xl cursor-pointer shrink-0 bg-[#141418]"
+              >
+                <img
+                  src={currentAppAvatar}
+                  alt="شعار وبروفيل تطبيق عباقرة عيون مصر"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                />
+                <div className="absolute inset-0 bg-black/65 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-[10px] font-bold text-[#d4af37] gap-1">
+                  <Camera className="w-4 h-4" />
+                  <span>تغيير الصورة</span>
+                </div>
+              </div>
+              <div>
+                <span className="label block mb-1">Primary Competition 2026 · Grades 4, 5 & 6</span>
+                <button
+                  onClick={() => setProfileModalOpen(true)}
+                  className="text-xs text-[#d4af37] hover:underline flex items-center gap-1 cursor-pointer font-bold"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  <span>تغيير صورة بروفيل التطبيق</span>
+                </button>
+              </div>
+            </div>
             <h1
               className="font-syne font-extrabold text-[#f2efeb] mb-6"
               style={{
@@ -297,12 +387,61 @@ export default function App() {
             >
               عباقرة عيون مصر
             </h1>
-            <p className="hero-tagline mb-6">
+            <p className="hero-tagline mb-4">
               «فكّر أسرع… اعرف أكثر… العب كفريق!»
             </p>
-            <p className="max-w-[520px] leading-[1.7] text-[rgba(242,239,235,0.6)] mb-10 text-sm sm:text-base">
+
+            {/* Official Artwork Banner Showcase */}
+            <div
+              onClick={() => setProfileModalOpen(true)}
+              className="relative group mb-6 rounded-2xl overflow-hidden border-2 border-[#d4af37]/80 shadow-2xl max-w-[600px] cursor-pointer"
+            >
+              <img
+                src={OFFICIAL_HERO_BANNER}
+                alt="عباقرة عيون مصر - فكّر أسرع... اعرف أكثر... العب كفريق!"
+                referrerPolicy="no-referrer"
+                className="w-full h-auto object-cover"
+              />
+            </div>
+
+            <p className="max-w-[520px] leading-[1.7] text-[rgba(242,239,235,0.6)] mb-5 text-sm sm:text-base">
               مرحباً بك في البطولة التفاعلية الكبرى لطلاب المرحلة الابتدائية العليا بمدرسة عيون مصر! رحلة مشوقة تجمع بين المعرفة، سرعة البديهة، التفكير المنطقي، دقة الملاحظة، والعمل الجماعي.
             </p>
+
+            {/* Dual Competition Mode Highlight: Individual + Team System */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-7 max-w-[580px]">
+              <div
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setCurrentView('qualifiers');
+                }}
+                className="p-4 rounded-xl bg-[#141A29] border border-emerald-400/50 hover:border-emerald-400 transition-all cursor-pointer space-y-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-emerald-400">👤 النظام الفردي (Individual)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold">طالب مستقل</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  يدخل كل طالب بمفرده بكود مشاركته في التصفيات الفردية أو مواجهات (طالب ضد طالب 1v1) ويحصل على بطاقة العبقري.
+                </p>
+              </div>
+
+              <div
+                onClick={() => {
+                  soundEngine.playSelectTile();
+                  setCurrentView('teams');
+                }}
+                className="p-4 rounded-xl bg-[#141A29] border border-amber-400/50 hover:border-amber-400 transition-all cursor-pointer space-y-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-400">👥 نظام الفرق (Teams 4-5)</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">مجموعة أولاد</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  مجموعة من الأولاد (٤ أو ٥ لاعبين) يكوّنون فريقاً باسم وشعار وقائد للتنافس الجماعي في استوديو العباقرة!
+                </p>
+              </div>
+            </div>
 
             <div className="flex flex-wrap gap-4">
               <button
@@ -439,7 +578,9 @@ export default function App() {
             <GamesArenaHub
               initialGameTab={selectedGameTab}
               teams={teams}
+              students={students}
               onAwardTeamPoints={handleAwardTeamPoints}
+              onAwardStudentPoints={handleAwardStudentPoints}
               onUseTeamCard={handleUseTeamCard}
               settings={settings}
               onTriggerGeniusAlarm={handleTriggerAlarm}
@@ -593,6 +734,124 @@ export default function App() {
                 style={{ padding: '0.5rem 1.2rem' }}
               >
                 إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 🖼️ APP PROFILE IMAGE CUSTOMIZATION MODAL ==================== */}
+      {profileModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="w-full max-w-xl bg-[#0f0f12] border-2 border-[#d4af37] rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[rgba(242,239,235,0.1)] pb-4">
+              <div className="flex items-center gap-2.5">
+                <Camera className="w-5 h-5 text-[#d4af37]" />
+                <h3 className="text-lg font-bold text-[#f2efeb] font-display">
+                  تغيير صورة بروفيل التطبيق (شعار عباقرة عيون مصر)
+                </h3>
+              </div>
+              <button
+                onClick={() => setProfileModalOpen(false)}
+                className="text-xs text-[rgba(242,239,235,0.6)] hover:text-white cursor-pointer"
+              >
+                إغلاق ✕
+              </button>
+            </div>
+
+            {/* Current Profile Image Preview */}
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-[#141418] border border-[rgba(242,239,235,0.12)]">
+              <img
+                src={currentAppAvatar}
+                alt="صورة بروفيل التطبيق الحالية"
+                referrerPolicy="no-referrer"
+                className="w-20 h-20 rounded-2xl object-cover border-2 border-[#d4af37] shrink-0"
+              />
+              <div className="space-y-1.5">
+                <div className="text-xs text-[#d4af37] font-bold">الصورة المعتمدة حالياً</div>
+                <p className="text-xs text-[rgba(242,239,235,0.65)] leading-relaxed">
+                  تظهر هذه الصورة في الهيدر العلوي، الصفحة الرئيسية، أيقونة المتصفح (Favicon)، وبطاقات التتويج.
+                </p>
+              </div>
+            </div>
+
+            {/* Option 1: Choose from 4 Official Generated Presets */}
+            <div className="space-y-2.5">
+              <div className="text-xs font-bold text-[#f2efeb]">
+                ١. اختر من الشعارات الرسمية الجاهزة لبرنامج «عباقرة عيون مصر»:
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {APP_PROFILE_PRESETS.map((preset) => {
+                  const isSelected = currentAppAvatar === preset.url;
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playSelectTile();
+                        setSettings((prev) => ({ ...prev, appProfileImage: preset.url }));
+                        setToast(`تم تحديث صورة بروفيل التطبيق إلى: ${preset.name}`);
+                        setTimeout(() => setToast(null), 3000);
+                      }}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-2 ${
+                        isSelected
+                          ? 'bg-[#d4af37]/20 border-[#d4af37] text-[#d4af37]'
+                          : 'bg-[#141418] border-[rgba(242,239,235,0.12)] text-[#f2efeb] hover:border-[#d4af37]/50'
+                      }`}
+                    >
+                      <img
+                        src={preset.url}
+                        alt={preset.name}
+                        referrerPolicy="no-referrer"
+                        className="w-16 h-16 rounded-xl object-cover border border-[rgba(242,239,235,0.2)]"
+                      />
+                      <span className="text-[11px] font-bold leading-tight">{preset.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Option 2: Upload Custom Image from User's Device */}
+            <div className="space-y-2.5 pt-2 border-t border-[rgba(242,239,235,0.1)]">
+              <div className="text-xs font-bold text-[#f2efeb]">
+                ٢. أو ارفع صورة خاصة من جهازك (شعار المدرسة أو صورة مخصصة):
+              </div>
+              <label className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#141418] border border-dashed border-[#d4af37]/60 text-[#d4af37] hover:bg-[#d4af37]/10 transition-colors cursor-pointer text-xs font-bold">
+                <Upload className="w-4 h-4" />
+                <span>اختر ملف صورة من جهازك (PNG / JPG)...</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      if (typeof reader.result === 'string') {
+                        soundEngine.playFanfare();
+                        setSettings((prev) => ({
+                          ...prev,
+                          appProfileImage: reader.result as string,
+                        }));
+                        setToast('تم رفع واعتماد صورة بروفيل التطبيق الجديدة بنجاح!');
+                        setTimeout(() => setToast(null), 3500);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setProfileModalOpen(false)}
+                className="btn btn-primary"
+                style={{ padding: '0.6rem 1.6rem' }}
+              >
+                ✓ تم الحفظ
               </button>
             </div>
           </div>
