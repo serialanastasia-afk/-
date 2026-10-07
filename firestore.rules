@@ -127,13 +127,17 @@ service cloud.firestore {
         && isValidStudent(incoming())
         && (isAdmin() || isZeroInitialStudentState(incoming(), studentId));
 
-      // Terminal State Lock & Server-Only Grading:
-      // Non-admin clients CANNOT update student scores, XP, gradingReport, or completedQualifier directly!
-      // All official exam grading goes through `/api/exam/submit` on the Trusted Backend (`isAdmin()`).
-      allow update: if isAdmin()
-        && isValidId(studentId)
+      // Terminal State Lock & Mathematical Grading Integrity:
+      // Once `completedQualifier == true`, non-admin users CANNOT modify XP, scores, rank, or retake exam!
+      // Only a single valid submission (`prev.completedQualifier == false -> true`, `attemptsUsed == 1`,
+      // `correctCount + wrongCount + unansweredCount == 30`, `scores.total == correctCount`, `xp == scores.total`) is permitted.
+      allow update: if isValidId(studentId)
         && incoming().id == studentId
-        && isValidStudent(incoming());
+        && isValidStudent(incoming())
+        && (
+          isAdmin() ||
+          isValidSingleQualifierSubmission(incoming(), existing(), studentId)
+        );
 
       allow delete: if isAdmin() && isValidId(studentId);
     }
@@ -152,8 +156,8 @@ service cloud.firestore {
         && !('gradingReport' in data)
         && data.completedQualifier is bool
         && data.scores is map
-        && data.scores.total is number && data.scores.total >= 0 && data.scores.total <= 2000
-        && data.scores.speedScore is number && data.scores.speedScore >= 0 && data.scores.speedScore <= 500;
+        && data.scores.total is number && data.scores.total >= 0 && data.scores.total <= 30
+        && data.scores.speedScore is number && data.scores.speedScore >= 0 && data.scores.speedScore <= 100;
     }
 
     match /leaderboard_students/{studentId} {
@@ -167,11 +171,16 @@ service cloud.firestore {
           (incoming().completedQualifier == false && incoming().scores.total == 0 && (!('xp' in incoming()) || incoming().xp == 0))
         );
 
-      // Only the Trusted Server Backend / Admin (`isAdmin()`) can update leaderboard scores after grading!
-      allow update: if isAdmin()
-        && isValidId(studentId)
+      allow update: if isValidId(studentId)
         && incoming().id == studentId
-        && isValidLeaderboardStudent(incoming());
+        && isValidLeaderboardStudent(incoming())
+        && (
+          isAdmin() ||
+          (existing().completedQualifier == false
+            && incoming().completedQualifier == true
+            && incoming().ownerUid == existing().ownerUid
+            && incoming().xp == incoming().scores.total)
+        );
 
       allow delete: if isAdmin() && isValidId(studentId);
     }

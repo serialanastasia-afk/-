@@ -95,6 +95,7 @@ import {
   saveSeasonConfigToCloud,
   saveProjectToCloud,
   deleteProjectFromCloud,
+  syncQuestionBankToTrustedServer,
 } from './services/firebaseCloudSync';
 import { soundEngine } from './utils/sound';
 
@@ -544,6 +545,7 @@ export default function App() {
           const data = docSnap.data();
           if (Array.isArray(data?.items)) {
             setCustomQuestions(data.items);
+            syncQuestionBankToTrustedServer(data.items);
           }
         }
       },
@@ -575,6 +577,7 @@ export default function App() {
           const data = docSnap.data() as SeasonOneConfig;
           if (data && data.name) {
             setSeasonOneConfig(data);
+            syncQuestionBankToTrustedServer(undefined, data);
           }
         }
       },
@@ -1949,7 +1952,12 @@ export default function App() {
                 }
 
                 setUnlockedJourneyIdx((prev) => Math.max(prev, 5));
-                setToast(`☁️ تم تصحيح واعتماد وحفظ نتيجة الطالب/ة «${updated.name}» (${updated.scores.total} نقطة) عبر الخادم الموثوق فوراً!`);
+                const ok = await saveStudentToCloud(authoritativeStudentPayload);
+                if (ok) {
+                  setToast(`☁️ تم تصحيح واعتماد وحفظ نتيجة الطالب/ة «${updated.name}» (${updated.scores.total} نقطة) عبر الخادم الموثوق فوراً!`);
+                } else {
+                  setToast(`⚠️ تم التصحيح عبر الخادم الموثوق؛ يرجى التحقق من الاتصال لحفظ النسخة السحابية.`);
+                }
                 setTimeout(() => setToast(null), 4000);
               }}
               onNavigateView={(v) => setCurrentView(v)}
