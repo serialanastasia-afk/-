@@ -80,10 +80,10 @@ export const JourneyMapView: React.FC<JourneyMapViewProps> = ({
         <div>
           <span className="label">JOURNEY MAP · 09 STATIONS</span>
           <h2 className="text-2xl font-bold text-[#f2efeb] font-display mt-1">
-            🧭 خريطة رحلة العباقرة التفاعلية — ٩ محطات معرفية
+            🧭 خريطة رحلة «دماغ عالية» التفاعلية — ٩ محطات معرفية
           </h2>
           <p className="text-xs text-[rgba(242,239,235,0.6)] mt-1">
-            كل مرحلة تفتح لك أبواب المدينة التالية بعد خوض تحدياتها بنجاح!
+            كل مرحلة تفتح لك أبواب المدينة التالية بعد خوض تحدياتها بنجاح! (👦 بلية ودماغه عالية!)
           </p>
         </div>
         <button
@@ -136,7 +136,7 @@ export const JourneyMapView: React.FC<JourneyMapViewProps> = ({
   );
 };
 
-// ==================== 2. 🪪 GENIUS CARD VIEW (بطاقة عبقري عيون مصر) ====================
+// ==================== 2. 🪪 GENIUS CARD VIEW (بطاقة دماغ عالية) ====================
 interface GeniusCardViewProps {
   student: StudentProfile;
   allStudents: StudentProfile[];
@@ -165,10 +165,10 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4 no-print">
         <div>
           <span className="text-xs font-semibold text-amber-400">
-            🪪 البطاقة الرقمية التحفيزية المعتمدة — مسابقة عباقرة عيون مصر للجمهورية
+            🪪 البطاقة الرقمية التحفيزية المعتمدة — مسابقة دماغ عالية (👦 بلية ودماغه عالية!)
           </span>
           <h2 className="text-2xl font-bold text-white font-display mt-0.5">
-            بطاقة عبقري عيون مصر (لجميع مراحل ومدارس الجمهورية)
+            بطاقة متسابق دماغ عالية — مسابقة المعرفة والذكاء والتفكير
           </h2>
         </div>
 
@@ -204,7 +204,7 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-amber-400">
-                🏆 عباقرة عيون مصر · بطاقة عبقري معتمدة
+                🧠 دماغ عالية · بطاقة متسابق معتمدة (👦 بلية ودماغه عالية!)
               </span>
               <span
                 className="px-2.5 py-0.5 rounded-full text-[11px] font-bold border"
@@ -227,7 +227,7 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
               </span>
             </div>
             <div className="text-xs text-emerald-300 font-semibold mt-2 flex flex-wrap items-center gap-2">
-              <span>🏫 المدرسة: {student.schoolName || 'مدرسة عيون مصر الرسمية للغات'}</span>
+              <span>🏫 المدرسة: {student.schoolName || 'المدرسة المسجلة'}</span>
               {student.schoolType && (
                 <>
                   <span>·</span>
@@ -241,10 +241,24 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
             </div>
           </div>
 
-          <div className="px-6 py-4 rounded-2xl bg-slate-950 border border-amber-400/50 text-center shrink-0">
-            <div className="text-xs text-slate-400">⭐ مجموع النقاط</div>
-            <div className="text-3xl font-bold font-mono-num text-amber-400 mt-0.5">
-              {student.scores.total}
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <div className="px-4 py-3 rounded-2xl bg-slate-950 border border-emerald-400/40 text-center">
+              <div className="text-[11px] text-slate-400">⚡ نقاط الخبرة (XP)</div>
+              <div className="text-2xl font-bold font-mono-num text-emerald-400 mt-0.5">
+                {student.xp ?? student.scores.total}
+              </div>
+            </div>
+            <div className="px-4 py-3 rounded-2xl bg-slate-950 border border-sky-400/40 text-center">
+              <div className="text-[11px] text-slate-400">🏅 الإنجازات</div>
+              <div className="text-2xl font-bold font-mono-num text-sky-400 mt-0.5">
+                {student.achievementsCount ?? student.badges.length}
+              </div>
+            </div>
+            <div className="px-6 py-4 rounded-2xl bg-slate-950 border border-amber-400/50 text-center">
+              <div className="text-xs text-slate-400">⭐ مجموع النقاط</div>
+              <div className="text-3xl font-bold font-mono-num text-amber-400 mt-0.5">
+                {student.scores.total}
+              </div>
             </div>
           </div>
         </div>
@@ -305,7 +319,7 @@ export const GeniusCardView: React.FC<GeniusCardViewProps> = ({
             </strong>
           </div>
           <div className="text-[11px] text-slate-400">
-            * مسابقة عباقرة عيون مصر — مسابقة الجمهورية للمعرفة والذكاء والتفكير
+            * مسابقة دماغ عالية — مسابقة المعرفة والذكاء والتفكير (👦 بلية ودماغه عالية!)
           </div>
         </div>
       </div>
@@ -373,17 +387,17 @@ export const AwardsShowcaseView: React.FC<AwardsShowcaseViewProps> = ({
           <div className="w-20 h-20 rounded-2xl overflow-hidden border-2 border-amber-400/60 shrink-0 hidden sm:block">
             <img
               src={victoryTrophyImg}
-              alt="جوائز عباقرة عيون مصر"
+              alt="جوائز مسابقة دماغ عالية"
               referrerPolicy="no-referrer"
               className="w-full h-full object-cover"
             />
           </div>
           <div>
             <div className="text-xs font-bold text-amber-400">
-              🏅 منصة التتويج والأوسمة الرسمية — مدرسة عيون مصر
+              🏅 منصة التتويج والأوسمة الرسمية — مسابقة دماغ عالية
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
-              جوائز وألقاب «عباقرة عيون مصر» العشرة
+              جوائز وألقاب «دماغ عالية» العشرة
             </h2>
             <p className="text-sm text-slate-300 mt-1 max-w-2xl leading-relaxed">
               لا تقتصر البطولة على المركز الأول فقط؛ بل نحتفي بكل موهبة في المنطق، العلوم، الحساب، اللغة، دقة الملاحظة، سرعة البديهة، وروح الفريق.
@@ -556,7 +570,7 @@ export const AwardsShowcaseView: React.FC<AwardsShowcaseViewProps> = ({
           <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-b from-[#17284A] to-[#0B1120] border-2 border-amber-400 p-8 text-center space-y-5 shadow-2xl">
             <div className="text-5xl">{selectedCertAward.icon}</div>
             <div className="text-xs font-bold text-amber-400">
-              🏆 مدرسة عيون مصر · شهادة استحقاق لقب رسمي
+              🏆 مسابقة دماغ عالية · شهادة استحقاق لقب رسمي
             </div>
             <h3 className="text-3xl font-bold text-white font-display">
               وسام «{selectedCertAward.title}»
@@ -628,7 +642,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
   const [builderName, setBuilderName] = React.useState('');
   const [builderEmblem, setBuilderEmblem] = React.useState('🦅');
   const [builderSchool, setBuilderSchool] = React.useState(
-    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+    settings.defaultSchoolName || ''
   );
   const [builderRegion, setBuilderRegion] = React.useState(
     settings.defaultRegion || 'القاهرة'
@@ -651,20 +665,20 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
       <section className="max-w-4xl mx-auto space-y-6">
         <div className="p-6 sm:p-8 rounded-2xl bg-[#131F38] border border-slate-800 space-y-4">
           <span className="text-xs font-semibold text-amber-400">
-            ℹ️ دليل البطولة وقواعد اللعب — عباقرة عيون مصر
+            ℹ️ دليل البطولة وقواعد اللعب — دماغ عالية (👦 بلية ودماغه عالية!)
           </span>
           <h2 className="text-2xl font-bold text-white font-display">
-            كيف نلعب في بطولة «عباقرة عيون مصر»؟
+            كيف نلعب في بطولة «دماغ عالية — مسابقة المعرفة والذكاء والتفكير»؟
           </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
-            صُممت مسابقة عباقرة عيون مصر لطلاب الصفوف الرابع والخامس والسادس الابتدائي لتجمع بين المتعة، التفكير المنطقي، سرعة البديهة، والعمل الجماعي عبر ٣ مراحل كبرى:
+            صُممت مسابقة دماغ عالية لطلاب الصفوف الرابع والخامس والسادس الابتدائي لتجمع بين المتعة، التفكير المنطقي، سرعة البديهة، والعمل الجماعي عبر ٣ مراحل كبرى:
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-              <div className="text-sm font-bold text-emerald-400">١. التصفيات الفردية 🌐</div>
+              <div className="text-sm font-bold text-emerald-400">١. مرحلة التأهيل الفردية 🌐</div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                يسجل الطالب اسمه وصفه وفصله ليحصل على كود مشاركة 🎟️، ويخوض اختباراً من ٥٠ سؤالاً في ٣٠ دقيقة موزعة على ٨ مجالات، ثم يحصل على «بطاقة العبقري» الرقمية.
+                يسجل الطالب اسمه وصفه وفصله ليحصل على كود مشاركة 🎟️، ويخوض اختبار التأهيل المكون من ٣٠ سؤالاً في ٣٠ دقيقة موزعة على ٧ مجالات، ثم يحصل على «بطاقة دماغ عالية» الرقمية.
               </p>
             </div>
             <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
@@ -676,7 +690,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
             <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
               <div className="text-sm font-bold text-sky-400">٣. التحديات الـ١١ والبطولة 🏆</div>
               <p className="text-xs text-slate-300 leading-relaxed">
-                تتنافس الفرق في ألعاب: عين الصقر، سرعة البرق، مخ العباقرة، المعلومة الغامضة، تحدي المخاطرة، سرقة النقاط، الصندوق الأسود، ممنوع الكلام، مصر في دقيقة، وغرفة العباقرة!
+                تتنافس الفرق في ألعاب: عين الصقر، سرعة البرق، مخ دماغ عالية، المعلومة الغامضة، تحدي المخاطرة، سرقة النقاط، الصندوق الأسود، ممنوع الكلام، مصر في دقيقة، وغرفة دماغ عالية!
               </p>
             </div>
           </div>
@@ -691,10 +705,10 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
             <span className="text-xs font-semibold text-amber-400">
-              🧩 المرحلة الثانية: الفرق المتأهلة لبرنامج «عباقرة عيون مصر»
+              🧩 الفرق المتنافسة في مسابقة «دماغ عالية — مسابقة المعرفة والذكاء والتفكير»
             </span>
             <h2 className="text-2xl font-bold text-white font-display mt-1">
-              فرق عباقرة مدرسة عيون مصر (تكوين الفريق من ٤ أو ٥ لاعبين)
+              فرق مسابقة دماغ عالية (تكوين الفريق من ٤ أو ٥ لاعبين)
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2.5">
@@ -708,7 +722,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
               onClick={onStartGameArena}
               className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs whitespace-nowrap cursor-pointer hover:bg-amber-300"
             >
-              📺 دخول استوديو برنامج العباقرة
+              📺 دخول استوديو دماغ عالية
             </button>
           </div>
         </div>
@@ -719,7 +733,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <div>
                 <h3 className="text-lg font-bold text-white font-display">
-                  ✨ تكوين فريق جديد لخوض منافسات «عباقرة عيون مصر»
+                  ✨ تكوين فريق جديد لخوض منافسات «دماغ عالية»
                 </h3>
                 <p className="text-xs text-slate-300">
                   اختر عدد لاعبي الفريق (٤ لاعبين أو ٥ لاعبين) وسجّل أسماءهم وصفوفهم الدراسية:
@@ -754,7 +768,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   type="text"
                   value={builderName}
                   onChange={(e) => setBuilderName(e.target.value)}
-                  placeholder="مثال: 🦅 فريق صقور عيون مصر"
+                  placeholder="مثال: 🧠 فريق دماغ عالية"
                   className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
                 />
               </div>
@@ -777,7 +791,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   type="text"
                   value={builderSchool}
                   onChange={(e) => setBuilderSchool(e.target.value)}
-                  placeholder="مثال: مدرسة عيون مصر للغات"
+                  placeholder="اكتب اسم المدرسة..."
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
                 />
               </div>
@@ -874,7 +888,9 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
               <button
                 type="button"
                 onClick={() => {
-                  if (!builderName.trim()) return;
+                  const cleanTeamName = builderName.trim();
+                  if (!cleanTeamName) return;
+                  if (teams.some((t) => t.name.trim() === cleanTeamName)) return;
                   soundEngine.playFanfare();
                   const now = Date.now();
                   const membersList = builderPlayers.slice(0, builderSize).map((p, i) => ({
@@ -886,16 +902,16 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   onCreateTeam({
                     id: `team-${now}`,
                     name: builderName.trim(),
-                    schoolName: builderSchool.trim() || 'مدرسة عيون مصر للغات',
+                    schoolName: builderSchool.trim() || 'مدرسة مشاركة',
                     region: builderRegion.trim() || 'القاهرة',
                     country: builderCountry.trim() || 'مصر 🇪🇬',
                     emblem: builderEmblem || '🏆',
                     color: '#F59E0B',
                     captainId: membersList[0].id,
-                    points: 100,
+                    points: 0,
                     wins: 0,
                     matchesPlayed: 0,
-                    titleBadge: '🌟 عباقرة عيون مصر',
+                    titleBadge: '🧠 دماغ عالية',
                     cards: {
                       challengeCard: true,
                       swapQuestionCard: true,
@@ -914,6 +930,17 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
           </div>
         )}
 
+        {teams.length === 0 ? (
+          <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-3">
+            <div className="text-3xl">🧩</div>
+            <h3 className="text-lg font-bold text-white font-display">
+              لم يتم تسجيل فرق بعد — سيتم إضافة الفرق الحقيقية فور تكوينها
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl mx-auto">
+              التزاماً بعدم استخدام بيانات تجريبية أو فرق وهمية، يمكنكِ تكوين فريق حقيقي من الزر أعلاه ليظهر هنا مباشرة.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {teams.map((team) => {
             const captain = team.members.find((m) => m.id === team.captainId) || team.members[0];
@@ -929,7 +956,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                       <h3 className="text-xl font-bold text-white font-display">{team.name}</h3>
                       <span className="text-xs text-amber-400">{team.titleBadge}</span>
                       <div className="text-[11px] text-emerald-300 mt-1">
-                        🏫 {team.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {team.region || settings.defaultRegion || 'القاهرة'} · 🌍 {team.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                        🏫 {team.schoolName || settings.defaultSchoolName || 'مدرسة مشاركة'} · 📍 {team.region || settings.defaultRegion || 'القاهرة'} · 🌍 {team.country || settings.defaultCountry || 'مصر 🇪🇬'}
                       </div>
                     </div>
                   </div>
@@ -975,6 +1002,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
             );
           })}
         </div>
+        )}
       </section>
     );
   }
@@ -985,13 +1013,13 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
         <div className="p-6 rounded-2xl bg-[#131F38] border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <span className="text-xs font-semibold text-amber-400">
-              🏆 المرحلة النهائية: الأدوار الإقصائية لبطولة مدرسة عيون مصر
+              🏆 المرحلة النهائية: الأدوار الإقصائية لبطولة دماغ عالية
             </span>
             <h2 className="text-2xl font-bold text-white font-display mt-1">
-              شجرة البطولة النهائية (نظام {settings.tournamentBracketSize} فرق → البطل)
+              شجرة البطولة النهائية للفرق الحقيقية المسجلة
             </h2>
             <p className="text-xs text-slate-300 mt-1">
-              ١٦ فريقاً ← ٨ فرق ← ٤ فرق ← فريقان ← 🏆 حامل كأس عباقرة عيون مصر
+              تُبنى المواجهات تلقائياً من الفرق الحقيقية المسجلة فقط بدون أي فرق أو نتائج مختلقة.
             </p>
           </div>
           <button
@@ -1002,32 +1030,43 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
           </button>
         </div>
 
-        {/* Visual Bracket Progression */}
+        {sortedTeams.length === 0 ? (
+          <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-3">
+            <div className="text-3xl">🏆</div>
+            <h3 className="text-lg font-bold text-white font-display">
+              قريبًا — سيتم تفعيل شجرة البطولة النهائية فور تكوين الفرق الحقيقية المتأهلة
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl mx-auto">
+              لا يتم عرض فرق أو نتائج مباريات وهمية. بمجرد تسجيل الفرق الفعلية في المسابقة ستظهر مواجهاتها الحقيقية هنا.
+            </p>
+          </div>
+        ) : (
+        /* Visual Bracket Progression from Real Teams Only */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
           {/* Semi Finals */}
           <div className="space-y-4">
             <div className="text-xs font-bold text-slate-400 text-center">
-              الدور نصف النهائي (٤ فرق)
+              الدور نصف النهائي
             </div>
             <div className="p-4 rounded-xl bg-[#131F38] border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-sm font-bold text-amber-400">
-                <span>🔥 فريق النيل</span>
-                <span className="font-mono-num">180</span>
+                <span>{sortedTeams[0]?.name || 'بانتظار فريق ١'}</span>
+                <span className="font-mono-num">{sortedTeams[0]?.points ?? '—'}</span>
               </div>
               <div className="flex items-center justify-between text-sm text-slate-400">
-                <span>🦅 فريق الصقر</span>
-                <span className="font-mono-num">150</span>
+                <span>{sortedTeams[3]?.name || 'بانتظار فريق ٤'}</span>
+                <span className="font-mono-num">{sortedTeams[3]?.points ?? '—'}</span>
               </div>
             </div>
 
             <div className="p-4 rounded-xl bg-[#131F38] border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-sm font-bold text-sky-400">
-                <span>⚡ فريق العباقرة</span>
-                <span className="font-mono-num">170</span>
+                <span>{sortedTeams[1]?.name || 'بانتظار فريق ٢'}</span>
+                <span className="font-mono-num">{sortedTeams[1]?.points ?? '—'}</span>
               </div>
               <div className="flex items-center justify-between text-sm text-slate-400">
-                <span>🌟 فريق المستقبل</span>
-                <span className="font-mono-num">145</span>
+                <span>{sortedTeams[2]?.name || 'بانتظار فريق ٣'}</span>
+                <span className="font-mono-num">{sortedTeams[2]?.points ?? '—'}</span>
               </div>
             </div>
           </div>
@@ -1037,16 +1076,16 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
             <div className="text-xs font-bold text-amber-400">⚔️ المباراة النهائية الكبرى</div>
             <div className="space-y-3">
               <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-400/50 flex items-center justify-between">
-                <span className="font-bold text-white">{sortedTeams[0]?.name}</span>
+                <span className="font-bold text-white">{sortedTeams[0]?.name || 'قريبًا'}</span>
                 <span className="font-mono-num font-bold text-amber-400 text-lg">
-                  {sortedTeams[0]?.points}
+                  {sortedTeams[0]?.points ?? '—'}
                 </span>
               </div>
               <div className="text-xs text-slate-400 font-bold">ضـــد</div>
               <div className="p-3.5 rounded-xl bg-slate-950 border border-sky-400/50 flex items-center justify-between">
-                <span className="font-bold text-white">{sortedTeams[1]?.name}</span>
+                <span className="font-bold text-white">{sortedTeams[1]?.name || 'قريبًا'}</span>
                 <span className="font-mono-num font-bold text-sky-400 text-lg">
-                  {sortedTeams[1]?.points}
+                  {sortedTeams[1]?.points ?? '—'}
                 </span>
               </div>
             </div>
@@ -1056,12 +1095,15 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
           <div className="p-6 rounded-2xl bg-[#131F38] border border-emerald-400/50 text-center space-y-2">
             <div className="text-4xl">🏆</div>
             <div className="text-xs text-emerald-400 font-bold">المتصدر الحالي للبطولة</div>
-            <h3 className="text-2xl font-bold text-white font-display">{sortedTeams[0]?.name}</h3>
+            <h3 className="text-2xl font-bold text-white font-display">
+              {sortedTeams[0]?.name || 'قريبًا'}
+            </h3>
             <p className="text-xs text-slate-300">
-              برصيد <strong className="font-mono-num text-amber-400">{sortedTeams[0]?.points}</strong> نقطة
+              برصيد <strong className="font-mono-num text-amber-400">{sortedTeams[0]?.points ?? 0}</strong> نقطة
             </p>
           </div>
         </div>
+        )}
       </section>
     );
   }
@@ -1083,48 +1125,47 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
         t.members.some((m) => m.name.includes(s.name.split(' ')[0]))
     );
 
-    const baseOffset = Math.max(0, 12 - idx * 3);
     const avgSpeed = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.speedScore, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 84 + baseOffset);
+      : 0;
 
     const avgLogic = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.logic, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 82 + baseOffset);
+      : 0;
 
     const avgScience = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.science, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 85 + baseOffset);
+      : 0;
 
     const avgCulture = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.general_culture, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 86 + baseOffset);
+      : 0;
 
     const avgObservation = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.observation, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 83 + baseOffset);
+      : 0;
 
     const avgMath = matchedStudents.length
       ? Math.round(
           matchedStudents.reduce((acc, s) => acc + s.scores.math, 0) /
             matchedStudents.length
         )
-      : Math.min(99, 84 + baseOffset);
+      : 0;
 
     const overallSkillAvg = Math.round(
       (avgSpeed + avgLogic + avgScience + avgCulture + avgObservation + avgMath) / 6
@@ -1153,38 +1194,38 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
   const radarSkillsData = [
     {
       skill: '⚡ السرعة والبديهة',
-      selectedTeam: activeRadarTeam?.avgSpeed || 85,
-      leaderTeam: topLeaderTeam?.avgSpeed || 92,
+      selectedTeam: activeRadarTeam?.avgSpeed || 0,
+      leaderTeam: topLeaderTeam?.avgSpeed || 0,
       fullMark: 100,
     },
     {
       skill: '🧠 المنطق والذكاء',
-      selectedTeam: activeRadarTeam?.avgLogic || 85,
-      leaderTeam: topLeaderTeam?.avgLogic || 92,
+      selectedTeam: activeRadarTeam?.avgLogic || 0,
+      leaderTeam: topLeaderTeam?.avgLogic || 0,
       fullMark: 100,
     },
     {
       skill: '🌍 الثقافة والرياضة',
-      selectedTeam: activeRadarTeam?.avgCulture || 85,
-      leaderTeam: topLeaderTeam?.avgCulture || 92,
+      selectedTeam: activeRadarTeam?.avgCulture || 0,
+      leaderTeam: topLeaderTeam?.avgCulture || 0,
       fullMark: 100,
     },
     {
       skill: '🔬 العلوم والابتكار',
-      selectedTeam: activeRadarTeam?.avgScience || 85,
-      leaderTeam: topLeaderTeam?.avgScience || 92,
+      selectedTeam: activeRadarTeam?.avgScience || 0,
+      leaderTeam: topLeaderTeam?.avgScience || 0,
       fullMark: 100,
     },
     {
       skill: '👁️ قوة الملاحظة',
-      selectedTeam: activeRadarTeam?.avgObservation || 85,
-      leaderTeam: topLeaderTeam?.avgObservation || 92,
+      selectedTeam: activeRadarTeam?.avgObservation || 0,
+      leaderTeam: topLeaderTeam?.avgObservation || 0,
       fullMark: 100,
     },
     {
       skill: '➗ الحساب الذهني',
-      selectedTeam: activeRadarTeam?.avgMath || 85,
-      leaderTeam: topLeaderTeam?.avgMath || 92,
+      selectedTeam: activeRadarTeam?.avgMath || 0,
+      leaderTeam: topLeaderTeam?.avgMath || 0,
       fullMark: 100,
     },
   ];
@@ -1209,7 +1250,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
     <section className="space-y-8">
       <div className="border-b border-slate-800 pb-4">
         <span className="text-xs font-semibold text-amber-400">
-          📊 لوحة الأبطال والتحليل الإحصائي — مدرسة عيون مصر
+          📊 لوحة الأبطال والتحليل الإحصائي — مسابقة دماغ عالية
         </span>
         <h2 className="text-2xl font-bold text-white font-display mt-1">
           ترتيب الفرق المتنافسة، الرسوم البيانية للتقدم، وألقاب التميز العشرة
@@ -1223,6 +1264,15 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
       ) : (
         <>
           {/* Top 3 Podium Cards */}
+          {sortedTeams.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-2">
+              <div className="text-3xl">📊</div>
+              <div className="text-sm font-bold text-white">لا توجد بيانات حقيقية متاحة حاليًا للفرق.</div>
+              <p className="text-xs text-slate-400">
+                سيتم عرض النتائج والرسوم البيانية للفرق هنا عند تسجيل الفرق الفعلية في قاعدة البيانات.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {sortedTeams.slice(0, 3).map((t, index) => {
               const medal = index === 0 ? '🥇 المركز الأول' : index === 1 ? '🥈 المركز الثاني' : '🥉 المركز الثالث';
@@ -1242,7 +1292,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   </div>
                   <h3 className="text-xl font-bold text-white font-display">{t.name}</h3>
                   <div className="text-[11px] text-emerald-300 mt-0.5">
-                    🏫 {t.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                    🏫 {t.schoolName || settings.defaultSchoolName || 'مدرسة مشاركة'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
                   </div>
                   <div className="flex items-baseline justify-between mt-2">
                     <div className="text-2xl font-bold font-mono-num text-emerald-400">
@@ -1264,6 +1314,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
               );
             })}
           </div>
+          )}
 
           {/* Individual Champions Ranking Section (🏆 أبطال النظام الفردي) */}
           <div className="p-6 rounded-2xl bg-[#131F38] border border-emerald-400/40 space-y-4">
@@ -1278,6 +1329,11 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
               </div>
             </div>
 
+            {students.length === 0 ? (
+              <div className="p-6 rounded-xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-400">
+                سيتم إضافة النتائج بعد تسجيل المشاركات الفعلية.
+              </div>
+            ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {[...students]
                 .sort((a, b) => b.scores.total - a.scores.total)
@@ -1313,7 +1369,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                         الصف {stu.grade} الابتدائي · فصل {stu.className}
                       </div>
                       <div className="text-[11px] text-emerald-300 mt-1">
-                        🏫 {stu.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {stu.region || settings.defaultRegion || 'القاهرة'} · 🌍 {stu.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                        🏫 {stu.schoolName || settings.defaultSchoolName || 'المدرسة المسجلة'} · 📍 {stu.region || settings.defaultRegion || 'القاهرة'} · 🌍 {stu.country || settings.defaultCountry || 'مصر 🇪🇬'}
                       </div>
                     </div>
                     <div className="mt-3 pt-2 border-t border-slate-800 flex items-center justify-between">
@@ -1325,6 +1381,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                   </div>
                 ))}
             </div>
+            )}
           </div>
 
           {/* ==================== 📈 RECHARTS TEAM ANALYTICS & PROGRESS SECTION ==================== */}
@@ -1478,7 +1535,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                     <span>٣. منحنى تطور نقاط الفرق عبر مراحل البطولة الخمس</span>
                   </h4>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    يتتبع مستوى صعود كل فريق من بوابة البداية والتصفيات وحتى مواجهات استوديو العباقرة المباشرة
+                    يتتبع مستوى صعود كل فريق من بوابة البداية والتصفيات وحتى مواجهات استوديو دماغ عالية المباشرة
                   </p>
                 </div>
               </div>
@@ -1530,7 +1587,7 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h3 className="text-xl font-bold text-white font-display">
-                🏅 ألقاب وجوائز التميز في «عباقرة عيون مصر»
+                🏅 ألقاب وجوائز التميز في «دماغ عالية»
               </h3>
               {onOpenAwardsPage && (
                 <button
@@ -1563,9 +1620,13 @@ export const TournamentAndLeaderboard: React.FC<TournamentAndLeaderboardProps> =
                       <div className="text-sm font-bold text-white font-display">{aw.title}</div>
                       <p className="text-[11px] text-slate-400 mt-1">{aw.desc}</p>
                     </div>
-                    {winnerLabel && (
+                    {winnerLabel ? (
                       <div className="mt-3 pt-2 border-t border-slate-800 text-[11px] text-amber-400 font-bold truncate">
                         👑 {winnerLabel}
+                      </div>
+                    ) : (
+                      <div className="mt-3 pt-2 border-t border-slate-800 text-[11px] text-slate-400 font-semibold">
+                        ⏳ بانتظار الحسم
                       </div>
                     )}
                   </div>

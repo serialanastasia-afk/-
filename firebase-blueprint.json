@@ -1,0 +1,232 @@
+{
+  "entities": {
+    "StudentProfile": {
+      "title": "StudentProfile",
+      "description": "Private student record containing full registration, grading report, and contact details (Owner or Admin access only)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 160 },
+        "grade": { "type": "string", "maxLength": 20 },
+        "stage": { "type": "string", "maxLength": 40 },
+        "className": { "type": "string", "maxLength": 60 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "schoolType": { "type": "string", "maxLength": 60 },
+        "administration": { "type": "string", "maxLength": 160 },
+        "governorate": { "type": "string", "maxLength": 100 },
+        "region": { "type": "string", "maxLength": 100 },
+        "country": { "type": "string", "maxLength": 100 },
+        "participationCode": { "type": "string", "maxLength": 60 },
+        "attemptsUsed": { "type": "number" },
+        "completedQualifier": { "type": "boolean" },
+        "qualifiedForFinals": { "type": "boolean" },
+        "xp": { "type": "number" },
+        "achievementsCount": { "type": "number" }
+      },
+      "required": ["id", "ownerUid", "name", "grade", "participationCode"]
+    },
+    "LeaderboardStudent": {
+      "title": "LeaderboardStudent",
+      "description": "Public sanitized leaderboard projection for national, governorate, and school rankings (No private contact/grading data)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 160 },
+        "grade": { "type": "string", "maxLength": 20 },
+        "stage": { "type": "string", "maxLength": 40 },
+        "schoolName": { "type": "string", "maxLength": 200 },
+        "administration": { "type": "string", "maxLength": 160 },
+        "governorate": { "type": "string", "maxLength": 100 },
+        "completedQualifier": { "type": "boolean" },
+        "xp": { "type": "number" },
+        "achievementsCount": { "type": "number" }
+      },
+      "required": ["id", "name", "grade", "completedQualifier"]
+    },
+    "RegisteredSchool": {
+      "title": "RegisteredSchool",
+      "description": "Administrative school record with supervisor details (Admin read/update/delete)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "schoolType": { "type": "string", "maxLength": 60 },
+        "administration": { "type": "string", "maxLength": 160 },
+        "governorate": { "type": "string", "maxLength": 100 },
+        "supervisorName": { "type": "string", "maxLength": 160 },
+        "schoolCode": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "name", "governorate"]
+    },
+    "PublicSchool": {
+      "title": "PublicSchool",
+      "description": "Public school directory entry containing only public school name, governorate, and administration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "schoolType": { "type": "string", "maxLength": 60 },
+        "administration": { "type": "string", "maxLength": 160 },
+        "governorate": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["id", "name", "governorate"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "Administrative team record (Admin read/update/delete)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 160 },
+        "points": { "type": "number" },
+        "wins": { "type": "number" }
+      },
+      "required": ["id", "name", "points"]
+    },
+    "PublicTeam": {
+      "title": "PublicTeam",
+      "description": "Public team leaderboard entry containing team name, emblem, and public points",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 160 },
+        "points": { "type": "number" },
+        "wins": { "type": "number" }
+      },
+      "required": ["id", "name", "points"]
+    },
+    "PlatformConfig": {
+      "title": "PlatformConfig",
+      "description": "Administrative platform configuration and custom question bank (Admin only)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id"]
+    },
+    "PublicPlatformConfig": {
+      "title": "PublicPlatformConfig",
+      "description": "Publicly visible season metadata, awards showcase, and seasons archive",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id"]
+    },
+    "RealPortfolioProject": {
+      "title": "RealPortfolioProject",
+      "description": "Authentic user project, competition, game, app, or invention",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 4000 },
+        "category": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "maxLength": 60 },
+        "image": { "type": "string" },
+        "realUrl": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "name", "category", "status"]
+    },
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Authorized platform administrator or supervisor document",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["admin", "supervisor"] }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "PrivateQuestionAnswerKeyDoc": {
+      "title": "PrivateQuestionAnswerKeyDoc",
+      "description": "Protected Answer Key document (Admin/Server read, list, and write only)",
+      "type": "object",
+      "properties": {
+        "questionId": { "type": "string", "maxLength": 128 },
+        "optionIndex": { "type": "number" },
+        "isCorrect": { "type": "boolean" },
+        "domain": { "type": "string", "maxLength": 60 },
+        "version": { "type": "number" },
+        "seasonId": { "type": "string", "maxLength": 60 },
+        "phaseId": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["questionId"]
+    },
+    "OfficialExamAttempt": {
+      "title": "OfficialExamAttempt",
+      "description": "Server-generated official exam attempt containing ONLY the 30 selected questions for the student without answer keys",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "attemptId": { "type": "string", "maxLength": 128 },
+        "studentId": { "type": "string", "maxLength": 128 },
+        "ownerUid": { "type": "string", "maxLength": 128 },
+        "seasonId": { "type": "string", "maxLength": 60 },
+        "phaseId": { "type": "string", "maxLength": 60 },
+        "status": { "type": "string", "enum": ["in_progress", "submitted", "expired"] },
+        "startedAt": { "type": "string", "maxLength": 60 },
+        "expiresAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "attemptId", "studentId", "ownerUid", "seasonId", "phaseId", "status"]
+    }
+  },
+  "firestore": {
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/StudentProfile" },
+      "description": "Private student records — strictly readable by owner student (get only) or Admin (get/list)"
+    },
+    "/leaderboard_students/{studentId}": {
+      "schema": { "$ref": "#/entities/LeaderboardStudent" },
+      "description": "Public sanitized leaderboard entries for national rankings and governorate stats"
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/RegisteredSchool" },
+      "description": "Administrative school records — Admin read/update/delete only"
+    },
+    "/public_schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/PublicSchool" },
+      "description": "Public school directory — public read, Admin update/delete"
+    },
+    "/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/Team" },
+      "description": "Administrative team records — Admin read/update/delete only"
+    },
+    "/public_teams/{teamId}": {
+      "schema": { "$ref": "#/entities/PublicTeam" },
+      "description": "Public team leaderboard — public read, Admin update/delete"
+    },
+    "/platform/{docId}": {
+      "schema": { "$ref": "#/entities/PlatformConfig" },
+      "description": "Administrative platform settings and custom question bank — Admin read/write only"
+    },
+    "/public_platform/{docId}": {
+      "schema": { "$ref": "#/entities/PublicPlatformConfig" },
+      "description": "Public season status, awards showcase, seasons archive, and sanitized public exam questions (without correctIndex/explanation) — public read, Admin write only"
+    },
+    "/question_answer_keys/{keyDocId}": {
+      "schema": { "$ref": "#/entities/PrivateQuestionAnswerKeyDoc" },
+      "description": "Protected Answer Key store — Admin/Server read, list, and write only"
+    },
+    "/exam_attempts/{attemptId}": {
+      "schema": { "$ref": "#/entities/OfficialExamAttempt" },
+      "description": "Server-generated official exam attempts — owner student get only; Admin/Server create, update, list, delete"
+    },
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/RealPortfolioProject" },
+      "description": "Real user projects — public read for published projects, Admin read/write for all"
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRole" },
+      "description": "Trusted collection of supervisor UIDs for Firestore role verification"
+    }
+  }
+}

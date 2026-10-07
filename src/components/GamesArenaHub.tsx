@@ -56,17 +56,17 @@ interface GamesArenaHubProps {
 }
 
 const GAME_TABS: { id: ChallengeGameId; label: string; icon: string; shortDesc: string }[] = [
-  { id: 'classic_board', label: '📺 استوديو برنامج العباقرة (لوحة المجالات)', icon: '📺', shortDesc: 'المواجهة التلفزيونية المباشرة بين الفريقين على غرار برنامج العباقرة' },
+  { id: 'classic_board', label: '📺 استوديو مسابقة دماغ عالية (لوحة المجالات)', icon: '📺', shortDesc: 'المواجهة التلفزيونية المباشرة بين الفريقين في استوديو دماغ عالية' },
   { id: 'falcon_eye', label: '👁️ عين الصقر', icon: '👁️', shortDesc: 'ملاحظة الصورة في ٥ ثوانٍ قبل اختفائها' },
   { id: 'lightning_speed', label: '⚡ سرعة البرق', icon: '⚡', shortDesc: 'نقاط إضافية كلما أجبت أسرع' },
-  { id: 'genius_brain', label: '🧠 مخ العباقرة', icon: '🧠', shortDesc: 'ألغاز تفكير واستنتاج وعلاقات منطقية' },
+  { id: 'genius_brain', label: '🧠 مخ دماغ عالية', icon: '🧠', shortDesc: 'ألغاز تفكير واستنتاج وعلاقات منطقية' },
   { id: 'mystery_fact', label: '🔬 المعلومة الغامضة', icon: '🔬', shortDesc: 'تعلم معلومة جديدة واستنتج الحل فوراً' },
   { id: 'risk_challenge', label: '🎯 فقرة عجلة الحظ والمخاطرة', icon: '🎯', shortDesc: 'اختر ١٠ أو ٢٠ أو ٣٠ أو ٥٠ نقطة قبل السؤال' },
   { id: 'point_steal', label: '🔥 سرقة النقاط', icon: '🔥', shortDesc: 'اقنص نقاط السؤال إذا أخطأ الفريق المنافس' },
   { id: 'mystery_box', label: '📦 الصندوق الغامض', icon: '📦', shortDesc: '٥ صناديق مفاجآت بينها الصندوق الأسود' },
   { id: 'no_talking', label: '🎭 فقرة التمثيل الصامت (الفنون)', icon: '🎭', shortDesc: 'تمثيل صامت بالإشارات فقط خلال ٦٠ ثانية' },
   { id: 'egypt_minute', label: '🇪🇬 مصر في دقيقة', icon: '🇪🇬', shortDesc: 'اذكر أكبر عدد من عناصر مصر في ٦٠ ثانية' },
-  { id: 'escape_room', label: '🔐 غرفة العباقرة', icon: '🔐', shortDesc: 'حل ٣ ألغاز متتالية لفتح رمز الخروج' },
+  { id: 'escape_room', label: '🔐 غرفة دماغ عالية', icon: '🔐', shortDesc: 'حل ٣ ألغاز متتالية لفتح رمز الخروج' },
 ];
 
 export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
@@ -102,27 +102,6 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
   useEffect(() => {
     if (initialGameTab) setActiveGame(initialGameTab);
   }, [initialGameTab]);
-
-  // Reset member votes whenever game, question, or turn changes
-  useEffect(() => {
-    setMemberVotes({});
-    setActiveVotingMemberId('');
-    setLastVotedOptionIdx(null);
-    setLastVotedMemberName('');
-  }, [
-    activeGame,
-    selectedTeamId,
-    rivalTeamId,
-    classicActiveQ?.id,
-    classicStealTurn,
-    feIndex,
-    ltIndex,
-    gbIndex,
-    mfIndex,
-    riskTier,
-    stealModeActive,
-    openedBoxId,
-  ]);
 
   const activeTeam = teams.find((t) => t.id === selectedTeamId) || teams[0];
   const rivalTeam = teams.find((t) => t.id === rivalTeamId) || teams[1] || teams[0];
@@ -273,6 +252,27 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
   const [classicAnswered, setClassicAnswered] = useState<Record<string, boolean>>({});
   const [classicActiveQ, setClassicActiveQ] = useState<typeof INITIAL_QUESTIONS[0] | null>(null);
   const [classicChosen, setClassicChosen] = useState<number | null>(null);
+
+  // Reset member votes whenever game, question, or turn changes
+  useEffect(() => {
+    setMemberVotes({});
+    setActiveVotingMemberId('');
+    setLastVotedOptionIdx(null);
+    setLastVotedMemberName('');
+  }, [
+    activeGame,
+    selectedTeamId,
+    rivalTeamId,
+    classicActiveQ?.id,
+    classicStealTurn,
+    feIndex,
+    ltIndex,
+    gbIndex,
+    mfIndex,
+    riskTier,
+    stealModeActive,
+    openedBoxId,
+  ]);
 
   useEffect(() => {
     if (!classicTimerRunning || classicChosen !== null || !classicActiveQ) return;
@@ -641,12 +641,12 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* ==================== 📺 AL-ABAKERA TV STUDIO DUAL PODIUM SCOREBOARD ==================== */}
+      {/* ==================== 📺 DEMAGH ALYA TV STUDIO DUAL PODIUM SCOREBOARD ==================== */}
       <div className="rounded-3xl bg-gradient-to-b from-[#16223B] via-[#111A2E] to-[#0B101D] border-2 border-[#d4af37]/60 p-5 sm:p-6 shadow-2xl space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/90 pb-4">
           <div className="flex flex-wrap items-center gap-3">
             <span className="px-3 py-1 rounded-full bg-[#d4af37] text-[#0f0f12] text-xs font-extrabold tracking-wide">
-              📺 استوديو برنامج العباقرة — مدرسة عيون مصر
+              📺 استوديو مسابقة دماغ عالية — 👦 بلية ودماغه عالية!
             </span>
 
             {/* Competition Mode Switcher: Individual vs Teams */}
@@ -749,7 +749,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
               className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-rose-600 text-white hover:bg-rose-500 transition-colors flex items-center gap-1.5 shadow-md cursor-pointer"
             >
               <Siren className="w-4 h-4" />
-              <span>🚨 جرس إنذار العباقرة!</span>
+              <span>🚨 جرس إنذار دماغ عالية!</span>
             </button>
           </div>
         </div>
@@ -785,7 +785,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
               </div>
 
               <div className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-emerald-300 flex flex-wrap items-center gap-2">
-                <span>🏫 {activeTeam?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}</span>
+                <span>🏫 {activeTeam?.schoolName || settings.defaultSchoolName || 'المدرسة المشاركة'}</span>
                 <span>·</span>
                 <span>📍 {activeTeam?.region || settings.defaultRegion || 'القاهرة'}</span>
                 <span>·</span>
@@ -868,7 +868,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
               </div>
 
               <div className="px-2.5 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] text-sky-300 flex flex-wrap items-center gap-2">
-                <span>🏫 {rivalTeam?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}</span>
+                <span>🏫 {rivalTeam?.schoolName || settings.defaultSchoolName || 'المدرسة المشاركة'}</span>
                 <span>·</span>
                 <span>📍 {rivalTeam?.region || settings.defaultRegion || 'القاهرة'}</span>
                 <span>·</span>
@@ -938,7 +938,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-emerald-300">
-                  🏫 {activeStudentObj?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {activeStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {activeStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                  🏫 {activeStudentObj?.schoolName || settings.defaultSchoolName || 'المدرسة المشاركة'} · 📍 {activeStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {activeStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
                 </div>
               </div>
             </div>
@@ -999,7 +999,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
                   </span>
                 </div>
                 <div className="text-[11px] text-sky-300">
-                  🏫 {rivalStudentObj?.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {rivalStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {rivalStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                  🏫 {rivalStudentObj?.schoolName || settings.defaultSchoolName || 'المدرسة المشاركة'} · 📍 {rivalStudentObj?.region || settings.defaultRegion || 'القاهرة'} · 🌍 {rivalStudentObj?.country || settings.defaultCountry || 'مصر 🇪🇬'}
                 </div>
               </div>
             </div>
@@ -1267,13 +1267,13 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
         </div>
       )}
 
-      {/* ==================== GAME 3: 🧠 GENIUS BRAIN (مخ العباقرة) ==================== */}
+      {/* ==================== GAME 3: 🧠 GENIUS BRAIN (مخ دماغ عالية) ==================== */}
       {activeGame === 'genius_brain' && (
         <div className="rounded-2xl bg-[#131F38] border border-slate-800 p-6 sm:p-8 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <div>
               <span className="text-xs text-purple-400 font-semibold">
-                🧠 مخ العباقرة · {currentBrain.category}
+                🧠 مخ دماغ عالية · {currentBrain.category}
               </span>
               <h3 className="text-xl font-bold text-white font-display mt-0.5">
                 ألغاز التفكير المنطقي وحل المشكلات (بدون حفظ)
@@ -1283,13 +1283,13 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
               onClick={() => setGbShowHint(!gbShowHint)}
               className="px-3.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-amber-300"
             >
-              💡 إظهار تلميح ذكي
+              💡 إظهار تلميح بلية الذكي
             </button>
           </div>
 
           {gbShowHint && (
             <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-400/40 text-xs text-amber-200">
-              تلميح العباقرة: {currentBrain.hint}
+              👦 تلميح بلية الذكي: {currentBrain.hint}
             </div>
           )}
 
@@ -1888,12 +1888,12 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
         </div>
       )}
 
-      {/* ==================== GAME 11: 🔐 ESCAPE ROOM (غرفة العباقرة) ==================== */}
+      {/* ==================== GAME 11: 🔐 ESCAPE ROOM (غرفة دماغ عالية) ==================== */}
       {activeGame === 'escape_room' && (
         <div className="rounded-2xl bg-[#131F38] border border-slate-800 p-6 sm:p-8 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
             <div>
-              <span className="text-xs text-amber-400 font-semibold">🔐 غرفة العباقرة المغلقة · حل ٣ ألغاز متتالية لاستخراج رمز الخروج</span>
+              <span className="text-xs text-amber-400 font-semibold">🔐 غرفة دماغ عالية المغلقة · حل ٣ ألغاز متتالية لاستخراج رمز الخروج</span>
               <h3 className="text-2xl font-bold text-white font-display mt-1">
                 مهمة الهروب الذكي لفريق {activeTeam?.name}
               </h3>
@@ -1943,10 +1943,10 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
             <div className="p-6 rounded-2xl bg-emerald-500/15 border border-emerald-400 text-center space-y-3">
               <Unlock className="w-10 h-10 text-emerald-400 mx-auto" />
               <h4 className="text-2xl font-bold text-white font-display">
-                🎉 تم فتح غرفة العباقرة بنجاح! الرمز النهائي: ({escapeClues.join(' - ')})
+                🎉 تم فتح غرفة دماغ عالية بنجاح! الرمز النهائي: ({escapeClues.join(' - ')})
               </h4>
               <p className="text-sm text-emerald-200">
-                حصل {activeTeam?.name} على مكافأة الخروج السريع (+60 نقطة)!
+                حصل {activeTeam?.name} على مكافأة الخروج السريع (+60 نقطة) — 👦 بلية ودماغه عالية!
               </p>
             </div>
           ) : (
@@ -1990,13 +1990,13 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
         </div>
       )}
 
-      {/* ==================== GAME 12: 📺 AL-ABAKERA TV STUDIO BOARD (لوحة مجالات برنامج العباقرة) ==================== */}
+      {/* ==================== GAME 12: 📺 DEMAGH ALYA TV STUDIO BOARD (لوحة مجالات مسابقة دماغ عالية) ==================== */}
       {activeGame === 'classic_board' && (
         <div className="space-y-6">
           <div className="p-4 rounded-2xl bg-[#131F38] border border-amber-400/40 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-bold text-white font-display flex items-center gap-2">
-                <span>📺 لوحة مجالات برنامج «العباقرة» الرسمية</span>
+                <span>📺 لوحة مجالات مسابقة «دماغ عالية» الرسمية</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/40">
                   ٨ مجالات × ٣ مستويات (١٠ - ٢٠ - ٣٠ نقطة)
                 </span>
@@ -2245,7 +2245,7 @@ export const GamesArenaHub: React.FC<GamesArenaHubProps> = ({
               {classicChosen !== null && (
                 <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="text-xs text-slate-300">
-                    <strong className="text-amber-400">💡 معلومة العباقرة:</strong>{' '}
+                    <strong className="text-amber-400">💡 معلومة دماغ عالية (👦 بلية):</strong>{' '}
                     {classicActiveQ.explanation}
                   </div>
                   <button

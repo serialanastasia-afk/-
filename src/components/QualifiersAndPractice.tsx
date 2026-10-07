@@ -14,16 +14,19 @@ import {
 } from 'lucide-react';
 import {
   QualifierQuestion,
+  PublicExamQuestion,
+  OfficialExamAttempt,
+  PublicQuestionBankReadinessSummary,
   StudentProfile,
   GradeNumber,
   CompetitionSettings,
   QualifierDomain,
   EducationalStage,
   SchoolType,
+  AppView,
 } from '../types/competition';
 import {
   DOMAIN_META,
-  ALL_STAGE_QUALIFIER_QUESTIONS,
   getPracticeQuestionsForStage,
 } from '../data/qualifierQuestions';
 import { DEFAULT_ANNUAL_PHASES } from '../data/challengesData';
@@ -34,9 +37,12 @@ import {
   SCHOOL_TYPE_LABELS,
   resolveStageFromGrade,
   buildStudentGroupingPath,
-  generateBalancedStudentExam,
-  gradeStudentExamAutomatically,
+  evaluateSeasonOneQuestionBankReadiness,
 } from '../services/qualificationEngine';
+import {
+  startOfficialExamAttemptOnServer,
+  submitOfficialExamAttemptOnServer,
+} from '../services/firebaseCloudSync';
 import { soundEngine } from '../utils/sound';
 
 interface QualifiersAndPracticeProps {
@@ -45,10 +51,11 @@ interface QualifiersAndPracticeProps {
   students: StudentProfile[];
   onRegisterStudent: (student: StudentProfile) => void;
   onCompleteQualifier: (studentId: string, updatedStudent: StudentProfile) => void;
-  onNavigateView: (view: 'home' | 'journey' | 'genius_card' | 'games_hub') => void;
+  onNavigateView: (view: AppView) => void;
   activeStudent: StudentProfile | null;
   setActiveStudent: (s: StudentProfile | null) => void;
   customQuestions: QualifierQuestion[];
+  publicReadinessSummary?: PublicQuestionBankReadinessSummary | null;
 }
 
 export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
@@ -61,6 +68,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   activeStudent,
   setActiveStudent,
   customQuestions,
+  publicReadinessSummary,
 }) => {
   // Registration state
   const [studentName, setStudentName] = useState('');
@@ -92,19 +100,37 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
   const [startTimeMs, setStartTimeMs] = useState<number>(0);
   const [entryTimeStr, setEntryTimeStr] = useState<string>('');
   const [timeoutTriggered, setTimeoutTriggered] = useState<boolean>(false);
+  const [isRegistering, setIsRegistering] = useState<boolean>(false);
+  const [isStartingExam, setIsStartingExam] = useState<boolean>(false);
+  const [isSubmittingExam, setIsSubmittingExam] = useState<boolean>(false);
+  const [activeAttempt, setActiveAttempt] = useState<OfficialExamAttempt | null>(null);
 
   // Practice immediate feedback
   const [practiceFeedbackIdx, setPracticeFeedbackIdx] = useState<number | null>(null);
 
-  const rawPool: QualifierQuestion[] = [...customQuestions, ...ALL_STAGE_QUALIFIER_QUESTIONS];
+  const rawPool: QualifierQuestion[] = customQuestions;
+  const readinessReport = React.useMemo(() => {
+    if (customQuestions.length > 0) {
+      return evaluateSeasonOneQuestionBankReadiness(rawPool, settings);
+    }
+    if (publicReadinessSummary && Array.isArray(publicReadinessSummary.domainStatus)) {
+      return publicReadinessSummary;
+    }
+    return evaluateSeasonOneQuestionBankReadiness([], settings);
+  }, [rawPool, customQuestions.length, publicReadinessSummary, settings.qualifierBlueprint]);
+
+  const eligibleGradesList: GradeNumber[] =
+    Array.isArray(settings.participatingGrades) && settings.participatingGrades.length > 0
+      ? settings.participatingGrades
+      : ['4', '5', '6'];
 
   const baseList: QualifierQuestion[] = React.useMemo(() => {
     if (mode === 'practice') return getPracticeQuestionsForStage(practiceStage);
-    if (activeStudent) {
-      return generateBalancedStudentExam(rawPool, activeStudent, settings);
+    if (activeAttempt && Array.isArray(activeAttempt.questions)) {
+      return activeAttempt.questions as unknown as QualifierQuestion[];
     }
-    return rawPool.slice(0, settings.questionsCountPerExam || 50);
-  }, [mode, practiceStage, activeStudent?.id, activeStudent?.participationCode, customQuestions.length, settings.questionsCountPerExam, settings.randomizeQuestionsOrder, settings.randomizeOptionsOrder]);
+    return [];
+  }, [mode, practiceStage, activeAttempt]);
 
   const questionList: QualifierQuestion[] =
     selectedDomainFilter === 'ALL'
@@ -147,7 +173,29 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
 
   const handleCreateStudentTicket = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isRegistering) return;
     if (!studentName.trim()) return;
+
+    if (!eligibleGradesList.includes(grade)) {
+      setLoginError(
+        `⚠️ الفئة المستهدفة المعتمدة للموسم الأول هي الصفوف: (${eligibleGradesList
+          .map((g) => GRADE_LABELS[g] || g)
+          .join(' + ')}) فقط.`
+      );
+      return;
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLoginError('⚠️ لا يوجد اتصال بالإنترنت حاليًا. يرجى التحقق من الاتصال قبل التسجيل لضمان حفظ بياناتك في السحابة.');
+      return;
+    }
+
+    setIsRegistering(true);
+    setTimeout(() => setIsRegistering(false), 1200);
+
+    const cleanName = studentName.trim();
+    const cleanSchool = schoolName.trim() || 'مدرسة غير محددة';
+    const cleanGov = governorate.trim() || 'القاهرة';
 
     const cleanCode =
       codeInput.trim().toUpperCase() ||
@@ -155,15 +203,21 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
 
     const maxAttempts = settings.allowedAttemptsPerStudent || 1;
 
-    // Check if code already exists
+    // Check if code already exists OR same student name + grade + school + governorate already exists (prevent duplicate registration)
     const existing = students.find(
-      (s) => s.participationCode.toUpperCase() === cleanCode
+      (s) =>
+        s.participationCode.toUpperCase() === cleanCode ||
+        (!codeInput.trim() &&
+          s.name.trim() === cleanName &&
+          s.grade === grade &&
+          (s.schoolName || '').trim() === cleanSchool &&
+          (s.governorate || s.region || '').trim() === cleanGov)
     );
     if (existing) {
       const used = existing.attemptsUsed || (existing.completedQualifier ? 1 : 0);
       if (existing.completedQualifier && used >= maxAttempts) {
         setLoginError(
-          `🔒 قام النظام تلقائياً بمنع إعادة المحاولة: هذا الكود استنفد عدد المحاولات المسموح بها (${used}/${maxAttempts}).`
+          `🔒 قام النظام تلقائياً بمنع إعادة المحاولة: هذا الطالب/الكود استنفد عدد المحاولات المسموح بها (${used}/${maxAttempts}).`
         );
         setActiveStudent(existing);
         return;
@@ -178,19 +232,21 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     const stage = resolveStageFromGrade(grade);
     const newStu: StudentProfile = {
       id: `stu-${Date.now()}`,
-      name: studentName.trim(),
+      name: cleanName,
       grade,
       stage,
       className: className.trim() || `${grade} / أ`,
-      schoolName: schoolName.trim() || 'مدرستي',
+      schoolName: cleanSchool,
       schoolType,
       administration: administration.trim() || 'الإدارة التعليمية',
-      governorate: governorate.trim() || 'القاهرة',
-      region: governorate.trim() || 'القاهرة',
+      governorate: cleanGov,
+      region: cleanGov,
       country: country.trim() || 'مصر 🇪🇬',
       participationCode: cleanCode,
       attemptsUsed: 0,
       completedQualifier: false,
+      xp: 0,
+      achievementsCount: 0,
       scores: {
         total: 0,
         speedScore: 0,
@@ -204,7 +260,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         technology: 0,
       },
       qualifiedForFinals: false,
-      badges: ['🏅 أول مشاركة'],
+      badges: [],
     };
 
     onRegisterStudent(newStu);
@@ -214,18 +270,120 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     soundEngine.playCorrect();
   };
 
-  const handleStartExamNow = () => {
+  // Restore in-progress qualifier session if page was reloaded mid-exam
+  useEffect(() => {
+    if (mode !== 'qualifier' || !activeStudent || activeStudent.completedQualifier) return;
+    try {
+      const savedSession = sessionStorage.getItem(`om_exam_session_${activeStudent.id}`);
+      if (savedSession) {
+        const parsed = JSON.parse(savedSession);
+        if (parsed && parsed.examStarted && parsed.secondsLeft > 0 && parsed.activeAttempt) {
+          setActiveAttempt(parsed.activeAttempt);
+          setAnswers(parsed.answers || {});
+          setCurrentIndex(parsed.currentIndex || 0);
+          setSecondsLeft(parsed.secondsLeft);
+          setStartTimeMs(parsed.startTimeMs || Date.now());
+          setEntryTimeStr(parsed.entryTimeStr || '');
+          setExamStarted(true);
+        }
+      }
+    } catch {}
+  }, [mode, activeStudent?.id]);
+
+  // Persist active exam progress to sessionStorage so reload/interruption doesn't lose answers
+  useEffect(() => {
+    if (mode !== 'qualifier' || !activeStudent || !examStarted || examFinished || !activeAttempt) return;
+    try {
+      sessionStorage.setItem(
+        `om_exam_session_${activeStudent.id}`,
+        JSON.stringify({
+          examStarted: true,
+          activeAttempt,
+          answers,
+          currentIndex,
+          secondsLeft,
+          startTimeMs,
+          entryTimeStr,
+        })
+      );
+    } catch {}
+  }, [mode, activeStudent?.id, examStarted, examFinished, activeAttempt, answers, currentIndex, secondsLeft, startTimeMs, entryTimeStr]);
+
+  const handleStartExamNow = async () => {
+    if (isStartingExam) return;
     const maxAttempts = settings.allowedAttemptsPerStudent || 1;
     const used = activeStudent?.attemptsUsed || (activeStudent?.completedQualifier ? 1 : 0);
-    if (mode === 'qualifier' && activeStudent?.completedQualifier && used >= maxAttempts) {
-      setLoginError(
-        `لقد استنفدت المحاولة المسموحة (${used}/${maxAttempts}). يمكنك استعراض بطاقة العبقري وحالة التأهل التلقائي.`
+    if (mode === 'qualifier') {
+      if (!activeStudent) return;
+      if (!eligibleGradesList.includes(activeStudent.grade)) {
+        setLoginError(
+          `⚠️ هذا الصف الدراسي غير مدرج ضمن الفئة المستهدفة للموسم الأول (${eligibleGradesList
+            .map((g) => GRADE_LABELS[g] || g)
+            .join(' + ')}).`
+        );
+        return;
+      }
+      if (!readinessReport.isReady) {
+        const shortageSummary = readinessReport.missingDomains
+          .map((d) => `${DOMAIN_META[d.domain].label}: متاح ${d.available}/${d.required} (نقص ${d.shortage})`)
+          .join(' · ');
+        setLoginError(
+          `🔒 المرحلة الأولى (التأهيل) غير جاهزة للبدء (NOT READY — المكتمل في التوزيع: ${readinessReport.fulfilledCount}/${readinessReport.totalRequired}). ${
+            shortageSummary ? `النقص الحالي: ${shortageSummary}` : ''
+          }`
+        );
+        return;
+      }
+      if (activeStudent.completedQualifier && used >= maxAttempts) {
+        setLoginError(
+          `لقد استنفدت المحاولة المسموحة (${used}/${maxAttempts}). يمكنك استعراض بطاقة العبقري وحالة التأهل التلقائي.`
+        );
+        return;
+      }
+
+      setIsStartingExam(true);
+      setLoginError(null);
+      const serverRes = await startOfficialExamAttemptOnServer(
+        activeStudent.id,
+        activeStudent.participationCode,
+        activeStudent
       );
+      setIsStartingExam(false);
+
+      if (serverRes.error || !serverRes.attempt) {
+        setLoginError(serverRes.error || 'تعذر إنشاء المحاولة الرسمية من الخادم الموثوق.');
+        return;
+      }
+
+      setActiveAttempt(serverRes.attempt);
+      const remainingSec = Math.max(
+        60,
+        Math.floor((serverRes.attempt.expiresAtMs - Date.now()) / 1000)
+      );
+      soundEngine.playBuzzer();
+      setExamStarted(true);
+      setExamFinished(false);
+      setIsSubmittingExam(false);
+      setTimeoutTriggered(false);
+      setCurrentIndex(0);
+      setAnswers({});
+      setStartTimeMs(serverRes.attempt.startedAtMs || Date.now());
+      setEntryTimeStr(
+        new Date(serverRes.attempt.startedAtMs || Date.now()).toLocaleTimeString('ar-EG', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        })
+      );
+      setSecondsLeft(remainingSec);
       return;
     }
+
+    // Practice mode only
     soundEngine.playBuzzer();
     setExamStarted(true);
     setExamFinished(false);
+    setIsSubmittingExam(false);
     setTimeoutTriggered(false);
     setCurrentIndex(0);
     setAnswers({});
@@ -237,7 +395,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         second: '2-digit',
       })
     );
-    setSecondsLeft(mode === 'qualifier' ? settings.qualifierDurationMinutes * 60 : 10 * 60);
+    setSecondsLeft(10 * 60);
   };
 
   const handleSelectOption = (optIndex: number) => {
@@ -255,40 +413,45 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     }
   };
 
-  const handleFinishExam = (isTimeoutAutoSubmit = false) => {
+  const handleFinishExam = async (isTimeoutAutoSubmit = false) => {
+    if (isSubmittingExam || examFinished) return;
+    if (mode === 'qualifier' && typeof navigator !== 'undefined' && !navigator.onLine) {
+      setLoginError('⚠️ انقطع الاتصال بالإنترنت! تم الاحتفاظ بإجاباتك محليًا؛ يرجى استعادة الاتصال ثم الضغط على إنهاء الاختبار لحفظ النتيجة في السحابة.');
+      return;
+    }
+    setIsSubmittingExam(true);
+
+    if (mode === 'practice' || !activeStudent) {
+      soundEngine.playFanfare();
+      setExamFinished(true);
+      setExamStarted(false);
+      return;
+    }
+
+    const attemptIdToSubmit = activeAttempt?.attemptId || `att_s1_st1_${activeStudent.id.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+    const submitRes = await submitOfficialExamAttemptOnServer(
+      attemptIdToSubmit,
+      activeStudent.id,
+      answers,
+      isTimeoutAutoSubmit,
+      activeStudent
+    );
+
+    if (submitRes.error || !submitRes.gradedStudent) {
+      setIsSubmittingExam(false);
+      setLoginError(submitRes.error || 'تعذر تصحيح وتسليم المحاولة الرسمية عبر الخادم الموثوق.');
+      return;
+    }
+
     soundEngine.playFanfare();
+    try {
+      sessionStorage.removeItem(`om_exam_session_${activeStudent.id}`);
+    } catch {}
+
     setExamFinished(true);
     setExamStarted(false);
-
-    if (mode === 'practice' || !activeStudent) return;
-
-    const elapsedSec = Math.max(
-      15,
-      Math.floor((Date.now() - startTimeMs) / 1000)
-    );
-
-    const gradedStudent = gradeStudentExamAutomatically(
-      activeStudent,
-      baseList,
-      answers,
-      elapsedSec,
-      entryTimeStr || '١٠:٠٠ ص',
-      isTimeoutAutoSubmit,
-      settings
-    );
-
-    const activePhaseId = settings.activeAnnualPhaseId || 'phase_2_administration';
-    const enrichedStudent: StudentProfile = {
-      ...gradedStudent,
-      currentAnnualPhaseReached: activePhaseId,
-      annualPhaseScores: {
-        ...(gradedStudent.annualPhaseScores || {}),
-        [activePhaseId]: gradedStudent.scores.total,
-      },
-    };
-
-    setActiveStudent(enrichedStudent);
-    onCompleteQualifier(enrichedStudent.id, enrichedStudent);
+    setActiveStudent(submitRes.gradedStudent);
+    onCompleteQualifier(submitRes.gradedStudent.id, submitRes.gradedStudent);
   };
 
   // ==================== PRACTICE MODE VIEW (#26 & #28: 10 Stage-Specific Practice Questions) ====================
@@ -296,14 +459,14 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
     return (
       <div className="max-w-4xl mx-auto rounded-3xl bg-[#131F38] border border-amber-400/40 p-6 sm:p-8 text-center space-y-6 shadow-2xl">
         <div>
-          <div className="text-xs font-extrabold text-amber-400 mb-2">
-            🎮 تجربة مجانية · ١٠ أسئلة تدريبية مخصصة حسب مرحلتك التعليمية
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 text-xs font-extrabold mb-2">
+            <span>🧪 نسخة اختبار (Test Mode — لا تُعرض كنسخة رسمية ولا تدخل في النتائج الحقيقية)</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
-            اختر مرحلتك التعليمية وابدأ التدريب التجريبي الآن
+            نسخة اختبار تدريبية — اختر مرحلتك التعليمية
           </h2>
           <p className="text-sm text-slate-300 mt-2 max-w-2xl mx-auto leading-relaxed">
-            تختلف الأسئلة الـ١٠ حسب مرحلتك العمرية (ابتدائي صغير، ابتدائي كبير، إعدادي، أو ثانوي). هذه الجولة التجريبية لا تدخل في النتائج الرسمية وتهدف لتعريفك بطريقة المنافسة في «عباقرة عيون مصر».
+            هذه <strong>نسخة اختبار</strong> داخلية لتجربة أسلوب الأسئلة حسب المرحلة العمرية (ابتدائي صغير، ابتدائي كبير، إعدادي، أو ثانوي). لا يتم حفظ أي نتائج منها في سجلات المتسابقين الحقيقيين.
           </p>
         </div>
 
@@ -437,39 +600,38 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Registration Form */}
         <div className="lg:col-span-6 rounded-2xl bg-[#131F38] border border-slate-800 p-6 sm:p-8">
-          <div className="text-xs font-extrabold text-emerald-400 mb-1">
-            📝 التسجيل في عباقرة عيون مصر · مسابقة مفتوحة لجميع مدارس الجمهورية
+          <div className="text-xs font-extrabold text-emerald-400 mb-1 flex items-center gap-2">
+            <span>📝 التسجيل في دماغ عالية · مسابقة المعرفة والذكاء والتفكير</span>
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/50 text-amber-300 text-[10px]">
+              👦 بلية ودماغه عالية!
+            </span>
           </div>
           <h2 className="text-2xl font-bold text-white font-display">
-            اختر مرحلتك وسجّل بيانات مدرستك لاستخراج كود المشاركة 🎫
+            اختر صفك وسجّل بيانات مدرستك لاستخراج كود المشاركة 🎫
           </h2>
           <p className="text-xs text-slate-400 mt-1">
             يرتبط كل طالب تلقائياً بمساره الوطني: (الطالب ← المدرسة ← الإدارة التعليمية ← المحافظة ← المرحلة التعليمية) دون جمع أي بيانات شخصية حساسة.
           </p>
 
-          {/* Quick Stage Selector Strip (#26) */}
+          {/* Season 1 Target Grades Selector Strip */}
           <div className="mt-4 p-3 rounded-xl bg-slate-950/90 border border-slate-800 space-y-2">
-            <div className="text-[11px] font-bold text-amber-300">
-              ١. اختر مرحلتك التعليمية (أو اختر الصف بالأسفل ليحدد النظام مستواك تلقائياً):
+            <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+              <span>١. الفئة المستهدفة للموسم الأول (المرحلة الابتدائية العليا):</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                الصفوف ٤ + ٥ + ٦ الابتدائي
+              </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {(
-                [
-                  { id: 'primary_lower', label: '🟢 ابتدائي صغير', defaultGrade: '2' as GradeNumber },
-                  { id: 'primary_upper', label: '🔵 ابتدائي كبير', defaultGrade: '5' as GradeNumber },
-                  { id: 'preparatory', label: '🟣 إعدادي', defaultGrade: '8' as GradeNumber },
-                  { id: 'secondary', label: '🟠 ثانوي', defaultGrade: '11' as GradeNumber },
-                ] as const
-              ).map((st) => {
-                const isCurr = autoDetectedStage === st.id;
+            <div className="grid grid-cols-3 gap-2">
+              {eligibleGradesList.map((g) => {
+                const isCurr = grade === g;
                 return (
                   <button
-                    key={st.id}
+                    key={g}
                     type="button"
                     onClick={() => {
                       soundEngine.playSelectTile();
-                      setGrade(st.defaultGrade);
-                      setClassName(`${st.defaultGrade} / أ`);
+                      setGrade(g);
+                      setClassName(`${g} / أ`);
                     }}
                     className={`py-2 px-2.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                       isCurr
@@ -477,7 +639,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                         : 'bg-slate-900 text-slate-300 border-slate-800 hover:text-white'
                     }`}
                   >
-                    {st.label}
+                    {GRADE_LABELS[g] || `الصف ${g}`}
                   </button>
                 );
               })}
@@ -506,7 +668,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-slate-300 mb-1">الصف الدراسي (توزيع تلقائي للمرحلة) *</label>
+                <label className="block text-xs text-slate-300 mb-1">الصف الدراسي المعتمد للموسم الأول *</label>
                 <select
                   value={grade}
                   onChange={(e) => {
@@ -516,25 +678,12 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                   }}
                   className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-amber-400 focus:outline-none"
                 >
-                  <optgroup label="ابتدائي صغير (الصفوف 1 - 3)">
-                    <option value="1">الصف الأول الابتدائي</option>
-                    <option value="2">الصف الثاني الابتدائي</option>
-                    <option value="3">الصف الثالث الابتدائي</option>
-                  </optgroup>
-                  <optgroup label="ابتدائي كبير (الصفوف 4 - 6)">
-                    <option value="4">الصف الرابع الابتدائي</option>
-                    <option value="5">الصف الخامس الابتدائي</option>
-                    <option value="6">الصف السادس الابتدائي</option>
-                  </optgroup>
-                  <optgroup label="المرحلة الإعدادية (1ع - 3ع)">
-                    <option value="7">الصف الأول الإعدادي</option>
-                    <option value="8">الصف الثاني الإعدادي</option>
-                    <option value="9">الصف الثالث الإعدادي</option>
-                  </optgroup>
-                  <optgroup label="المرحلة الثانوية (1ث - 3ث)">
-                    <option value="10">الصف الأول الثانوي</option>
-                    <option value="11">الصف الثاني الثانوي</option>
-                    <option value="12">الصف الثالث الثانوي</option>
+                  <optgroup label="الصفوف المعتمدة للموسم الأول (٤ - ٦ ابتدائي)">
+                    {eligibleGradesList.map((g) => (
+                      <option key={g} value={g}>
+                        {GRADE_LABELS[g] || `الصف ${g}`}
+                      </option>
+                    ))}
                   </optgroup>
                 </select>
               </div>
@@ -661,7 +810,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
               <div className="flex items-center justify-between border-b border-slate-700/80 pb-4">
                 <div>
                   <div className="text-xs text-amber-400 font-semibold">
-                    🎟️ تذكرة دخول رسمية — {activeStudent.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}
+                    🎟️ تذكرة دخول رسمية — {activeStudent.schoolName || settings.defaultSchoolName || 'المدرسة المسجلة'}
                   </div>
                   <h3 className="text-xl font-bold text-white font-display mt-0.5">{activeStudent.name}</h3>
                   <div className="text-xs text-slate-300 mt-1">
@@ -723,32 +872,85 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                       عرض بطاقة العبقري وتقرير التصحيح 🪪
                     </button>
                   </div>
-                ) : (
+                ) : readinessReport.isReady ? (
                   <button
                     onClick={handleStartExamNow}
                     className="w-full py-3.5 text-sm font-bold bg-emerald-500 text-slate-950 rounded-xl hover:bg-emerald-400 transition-colors flex items-center justify-center gap-2 shadow-lg"
                   >
                     <Play className="w-4 h-4" />
                     <span>
-                      🚀 دخول الاختبار الإلكتروني التلقائي ({settings.questionsCountPerExam || 50} سؤالاً — {settings.qualifierDurationMinutes} دقيقة)
+                      🚀 دخول اختبار المرحلة الأولى: التأهيل ({settings.questionsCountPerExam || 30} سؤالاً — {settings.qualifierDurationMinutes || 30} دقيقة)
                     </span>
                   </button>
+                ) : (
+                  <div className="w-full p-3.5 rounded-xl bg-amber-500/15 border border-amber-400/50 text-amber-200 text-xs font-bold flex items-center justify-between gap-2">
+                    <span>
+                      🔒 المرحلة الأولى (التأهيل) مقفلة حاليًا لحين اكتمال التوزيع المعتمد في كل مجال ({readinessReport.fulfilledCount}/{readinessReport.totalRequired} سؤالًا مكتملًا — ينقص {readinessReport.missingTotal} أسئلة).
+                    </span>
+                    <span className="px-2.5 py-1 rounded bg-slate-950 text-amber-400 font-mono-num shrink-0">
+                      NOT READY
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* 50-Question Breakdown Card */}
-          <div className="rounded-2xl bg-[#131F38] border border-slate-800 p-6">
-            <h3 className="text-base font-bold text-white font-display mb-1">
-              توزيع مجالات اختبار التصفيات (50 سؤالاً — 30 دقيقة)
-            </h3>
-            <p className="text-xs text-slate-400 mb-4">
-              تتدرج الأسئلة بين 🟢 سهل و🟡 متوسط و🔴 صعب، ولا تظهر الإجابة الصحيحة أثناء الاختبار الرسمي ضماناً للعدالة.
-            </p>
+          {/* 30-Question Season 1 Blueprint & Official Rules Card */}
+          <div className="rounded-2xl bg-[#131F38] border border-slate-800 p-6 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 className="text-base font-bold text-white font-display">
+                  توزيع مجالات المرحلة الأولى: التأهيل (30 سؤالاً — 30 دقيقة)
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  محاولة رسمية واحدة · اختيار من متعدد · ترتيب عشوائي للأسئلة والاختيارات · مسموح بالرجوع للسؤال السابق.
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-[11px] font-extrabold border ${
+                  readinessReport.isReady
+                    ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                    : 'bg-amber-500/20 border-amber-400 text-amber-300'
+                }`}
+              >
+                {readinessReport.isReady
+                  ? `🟢 READY — مكتمل (${readinessReport.fulfilledCount}/${readinessReport.totalRequired})`
+                  : `⏳ NOT READY — مكتمل في التوزيع (${readinessReport.fulfilledCount}/${readinessReport.totalRequired})`}
+              </span>
+            </div>
+
+            {!readinessReport.isReady && readinessReport.missingDomains.length > 0 && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-400/50 text-rose-200 text-xs space-y-1">
+                <div className="font-extrabold text-rose-300">
+                  ⚠️ تنبيه جاهزية بنك الأسئلة (NOT READY — لا يُسمح بتكرار الأسئلة أو التعويض من مجال آخر):
+                </div>
+                <div>
+                  المجالات التي تحتاج استكمالًا قبل فتح الاختبار الرسمي:{' '}
+                  {readinessReport.missingDomains
+                    .map(
+                      (d) =>
+                        `${DOMAIN_META[d.domain].label} (متاح ${d.available} من ${d.required} — ينقص ${d.shortage})`
+                    )
+                    .join(' ، ')}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-              {(Object.keys(DOMAIN_META) as QualifierDomain[]).map((domKey) => {
+              {(
+                [
+                  'arabic',
+                  'math',
+                  'science',
+                  'egypt_world',
+                  'english',
+                  'general_culture',
+                  'logic',
+                ] as QualifierDomain[]
+              ).map((domKey) => {
                 const info = DOMAIN_META[domKey];
+                const statusItem = readinessReport.domainStatus.find((d) => d.domain === domKey);
                 return (
                   <div
                     key={domKey}
@@ -757,12 +959,33 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                     <span className="font-semibold" style={{ color: info.color }}>
                       {info.label}
                     </span>
-                    <span className="font-mono-num text-slate-300 font-bold">
-                      {info.targetCount} أسئلة
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono-num text-slate-300 font-bold">
+                        {statusItem?.required ?? info.targetCount} أسئلة
+                      </span>
+                      {statusItem && (
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono-num ${
+                            statusItem.isComplete
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-rose-500/20 text-rose-300 font-bold'
+                          }`}
+                        >
+                          {statusItem.isComplete
+                            ? `✓ متاح: ${statusItem.available}/${statusItem.required}`
+                            : `متاح: ${statusItem.available}/${statusItem.required} (نقص ${statusItem.shortage})`}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-950/90 border border-slate-800 text-[11px] text-slate-300 space-y-1">
+              <div className="font-extrabold text-amber-300">⚖️ قواعد التصحيح الرسمية للموسم الأول:</div>
+              <div>• الدرجة الأساسية = عدد الإجابات الصحيحة من 30 (الإجابة الخاطئة = 0، غير المجاب = 0، لا يوجد خصم مخاطرة).</div>
+              <div>• سرعة الإنجاز تُستخدم فقط كعامل كسر تعادل عند تساوي الدرجة الأساسية بين المتسابقين.</div>
             </div>
           </div>
         </div>
@@ -794,7 +1017,7 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
               🤖 تم التصحيح الآلي واحتساب النتيجة والترتيب تلقائياً!
             </h2>
             <p className="text-sm text-slate-300 leading-relaxed">
-              أحسنت يا <strong className="text-amber-400">{activeStudent?.name}</strong>! قام محرك التصفيات الذاتي بتصحيح إجاباتك وحساب نقاطك وزمن استجابتك وتحديث ترتيبك في مجموعة ({STAGE_METADATA[activeStudent?.stage || 'primary_upper'].shortLabel}).
+              👦 <strong className="text-amber-300">بلية بيقولك: برافو ودماغك عالية يا {activeStudent?.name}!</strong> قام محرك التصفيات الذاتي بتصحيح إجاباتك وحساب نقاطك وزمن استجابتك وتحديث ترتيبك في مجموعة ({STAGE_METADATA[activeStudent?.stage || 'primary_upper'].shortLabel}).
             </p>
 
             {/* Automated Grading Breakdown Metrics */}
@@ -867,13 +1090,13 @@ export const QualifiersAndPractice: React.FC<QualifiersAndPracticeProps> = ({
                 onClick={() => onNavigateView('genius_card')}
                 className="px-6 py-3 text-xs font-bold bg-amber-400 text-slate-950 rounded-xl hover:bg-amber-300 transition-colors"
               >
-                🪪 استعراض بطاقة عبقري عيون مصر
+                🪪 استعراض بطاقة دماغ عالية
               </button>
               <button
                 onClick={() => onNavigateView('journey')}
                 className="px-5 py-3 text-xs font-semibold bg-slate-800 text-white rounded-xl hover:bg-slate-700 transition-colors"
               >
-                🧭 العودة إلى خريطة رحلة العباقرة
+                🧭 العودة إلى خريطة رحلة دماغ عالية
               </button>
             </div>
           </div>

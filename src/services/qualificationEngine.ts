@@ -211,48 +211,342 @@ function seededShuffle<T>(items: T[], rand: () => number): T[] {
   return copy;
 }
 
+export interface QuestionValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
+const SEASON_ONE_OFFICIAL_DOMAINS: QualifierDomain[] = [
+  'arabic',
+  'math',
+  'science',
+  'egypt_world',
+  'english',
+  'general_culture',
+  'logic',
+];
+
 /**
- * Generates a balanced, stage-isolated exam for a specific student.
- * Guarantees:
- * - Same total number of questions
- * - Same domain distribution
- * - Same difficulty distribution (easy / medium / hard)
- * - Same total points & time limit
- * - Shuffled question order and shuffled option order per student (anti-cheating)
+ * Validates a question against the official Season 1 schema and business rules:
+ * - Non-empty question text
+ * - Exactly 4 non-empty distinct options
+ * - Valid correctIndex (0..3)
+ * - Valid domain (one of the 7 official domains)
+ * - Valid grade ('4', '5', '6', or 'all')
+ * - Valid stage ('primary_upper' or 'all')
+ * - Valid difficulty ('easy' | 'medium' | 'hard')
+ */
+export function validateOfficialQuestion(
+  q: Partial<QualifierQuestion>,
+  existingQuestions: QualifierQuestion[] = [],
+  editingId?: string | null
+): QuestionValidationResult {
+  const errors: string[] = [];
+  const trimmedQuestion = (q.question || '').trim();
+  if (!trimmedQuestion) {
+    errors.push('نص السؤال مطلوب ولا يمكن أن يكون فارغًا.');
+  }
+
+  if (!q.domain || !SEASON_ONE_OFFICIAL_DOMAINS.includes(q.domain)) {
+    errors.push('يرجى اختيار مجال رسمي معتمد من المجالات الـ7 للموسم الأول.');
+  }
+
+  const validGrades: (GradeNumber | 'all')[] = ['4', '5', '6', 'all'];
+  if (!q.grade || !validGrades.includes(q.grade)) {
+    errors.push('الصف الدراسي للسؤال يجب أن يكون ضمن الصفوف المعتمدة (٤ أو ٥ أو ٦ أو جميع الصفوف ٤-٦).');
+  }
+
+  if (q.stage && q.stage !== 'primary_upper' && q.stage !== 'all') {
+    errors.push('المرحلة التعليمية للسؤال يجب أن تكون المرحلة الابتدائية العليا (primary_upper).');
+  }
+
+  const validDiffs: DifficultyLevel[] = ['easy', 'medium', 'hard'];
+  if (!q.difficulty || !validDiffs.includes(q.difficulty)) {
+    errors.push('مستوى الصعوبة يجب أن يكون: سهل (easy) أو متوسط (medium) أو صعب (hard).');
+  }
+
+  if (!Array.isArray(q.options) || q.options.length !== 4) {
+    errors.push('يجب إدخال ٤ اختيارات كاملة للسؤال.');
+  } else {
+    const trimmedOpts = q.options.map((o) => (typeof o === 'string' ? o.trim() : ''));
+    if (trimmedOpts.some((o) => !o)) {
+      errors.push('جميع الاختيارات الأربعة مطلوبة ولا يُسمح بترك أي اختيار فارغًا.');
+    }
+    const uniqueOpts = new Set(trimmedOpts.map((o) => o.toLowerCase()));
+    if (trimmedOpts.every(Boolean) && uniqueOpts.size < 4) {
+      errors.push('يجب أن تكون الاختيارات الأربعة مختلفة وغير مكررة داخل نفس السؤال.');
+    }
+  }
+
+  if (
+    typeof q.correctIndex !== 'number' ||
+    !Number.isInteger(q.correctIndex) ||
+    q.correctIndex < 0 ||
+    q.correctIndex > 3
+  ) {
+    errors.push('يجب تحديد إجابة صحيحة واحدة فقط من الاختيارات الأربعة (0 إلى 3).');
+  }
+
+  if (trimmedQuestion && existingQuestions.length > 0) {
+    const normalizedNew = trimmedQuestion.replace(/\s+/g, ' ').toLowerCase();
+    const duplicate = existingQuestions.find(
+      (item) =>
+        item.id !== editingId &&
+        (item.question || '').trim().replace(/\s+/g, ' ').toLowerCase() === normalizedNew
+    );
+    if (duplicate) {
+      errors.push('هذا السؤال موجود بالفعل في بنك الأسئلة (يُمنع تكرار نفس نص السؤال).');
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+export interface QuestionBankReadinessReport {
+  isReady: boolean;
+  totalRequired: number;
+  totalAvailable: number;
+  totalInBank: number;
+  draftCount: number;
+  archivedCount: number;
+  fulfilledCount: number;
+  domainStatus: {
+    domain: QualifierDomain;
+    required: number;
+    available: number;
+    totalDomainInBank: number;
+    shortage: number;
+    isComplete: boolean;
+  }[];
+  missingDomains: {
+    domain: QualifierDomain;
+    required: number;
+    available: number;
+    shortage: number;
+  }[];
+  missingTotal: number;
+}
+
+/**
+ * Checks whether a question is approved, published, and valid for official Season 1 exams.
+ * Supports both full admin questions (with `correctIndex`) and sanitized public delivery questions
+ * (where `correctIndex` is intentionally stripped for security).
+ */
+export function isQuestionApprovedAndPublished(
+  q: QualifierQuestion,
+  requireAnswerKey = false
+): boolean {
+  if (!q || !q.id || typeof q.question !== 'string' || !q.question.trim()) return false;
+  if (!Array.isArray(q.options) || q.options.length !== 4) return false;
+  if (q.options.some((opt) => typeof opt !== 'string' || !opt.trim())) return false;
+  if (requireAnswerKey) {
+    if (
+      typeof q.correctIndex !== 'number' ||
+      q.correctIndex < 0 ||
+      q.correctIndex >= q.options.length
+    ) {
+      return false;
+    }
+  }
+  const status = q.reviewStatus || 'approved';
+  const isPub = q.published !== undefined ? q.published : status === 'approved';
+  return status === 'approved' && isPub === true;
+}
+
+/**
+ * Deduplicates questions by both `id` and normalized question text (`question.trim()`)
+ * and filters to verified, approved, and published questions eligible for Season 1 (`primary_upper` / Grades 4, 5, 6).
+ */
+export function getDeduplicatedSeasonOnePool(
+  allQuestions: QualifierQuestion[],
+  eligibleGrades: GradeNumber[] = ['4', '5', '6'],
+  targetPhaseId: 'stage_1_qualifiers' | 'stage_2_semi_finals' | 'stage_3_finals' = 'stage_1_qualifiers'
+): QualifierQuestion[] {
+  const seenIds = new Set<string>();
+  const seenTexts = new Set<string>();
+  const result: QualifierQuestion[] = [];
+
+  for (const q of allQuestions) {
+    if (!isQuestionApprovedAndPublished(q)) continue;
+    if (q.seasonId && q.seasonId !== 'season_1') continue;
+    if (q.phaseId && q.phaseId !== targetPhaseId) continue;
+    if (q.stage && q.stage !== 'all' && q.stage !== 'primary_upper') continue;
+    if (q.grade && q.grade !== 'all' && !eligibleGrades.includes(q.grade)) continue;
+
+    const normText = q.question.trim().replace(/\s+/g, ' ').toLowerCase();
+    if (!normText) continue;
+    if (seenIds.has(q.id) || seenTexts.has(normText)) continue;
+
+    seenIds.add(q.id);
+    seenTexts.add(normText);
+    result.push(q);
+  }
+
+  return result;
+}
+
+/**
+ * Evaluates whether the official question bank satisfies the Season 1 30-question
+ * blueprint across the 7 official domains for Grades 4, 5, and 6 (`primary_upper`).
+ * Stage 1 (Qualifiers) cannot be opened for official attempts until `isReady === true`.
+ */
+export function evaluateSeasonOneQuestionBankReadiness(
+  allQuestions: QualifierQuestion[],
+  settings?: CompetitionSettings
+): QuestionBankReadinessReport {
+  const blueprint = settings?.qualifierBlueprint || {
+    arabic: 5,
+    math: 5,
+    science: 4,
+    egypt_world: 4,
+    english: 4,
+    general_culture: 4,
+    logic: 4,
+  };
+
+  const eligibleGrades: GradeNumber[] =
+    settings?.participatingGrades && settings.participatingGrades.length > 0
+      ? settings.participatingGrades
+      : ['4', '5', '6'];
+
+  const eligiblePool = getDeduplicatedSeasonOnePool(
+    allQuestions,
+    eligibleGrades,
+    'stage_1_qualifiers'
+  );
+
+  const totalInBank = allQuestions.length;
+  const draftCount = allQuestions.filter(
+    (q) => q.reviewStatus === 'draft' || q.published === false
+  ).length;
+  const archivedCount = allQuestions.filter((q) => q.reviewStatus === 'archived').length;
+
+  const requiredDomains: { domain: QualifierDomain; required: number }[] = [
+    { domain: 'arabic', required: blueprint.arabic ?? 5 },
+    { domain: 'math', required: blueprint.math ?? 5 },
+    { domain: 'science', required: blueprint.science ?? 4 },
+    { domain: 'egypt_world', required: blueprint.egypt_world ?? 4 },
+    { domain: 'english', required: blueprint.english ?? 4 },
+    { domain: 'general_culture', required: blueprint.general_culture ?? 4 },
+    { domain: 'logic', required: blueprint.logic ?? 4 },
+  ];
+
+  const domainStatus = requiredDomains.map(({ domain, required }) => {
+    const available = eligiblePool.filter((q) => q.domain === domain).length;
+    const totalDomainInBank = allQuestions.filter((q) => q.domain === domain).length;
+    const shortage = Math.max(0, required - available);
+    return {
+      domain,
+      required,
+      available,
+      totalDomainInBank,
+      shortage,
+      isComplete: available >= required && shortage === 0,
+    };
+  });
+
+  const totalRequired = requiredDomains.reduce((sum, d) => sum + d.required, 0);
+  const totalAvailable = domainStatus.reduce((sum, d) => sum + d.available, 0);
+  const fulfilledCount = domainStatus.reduce(
+    (sum, d) => sum + Math.min(d.available, d.required),
+    0
+  );
+  const missingDomains = domainStatus
+    .filter((d) => !d.isComplete)
+    .map(({ domain, required, available, shortage }) => ({
+      domain,
+      required,
+      available,
+      shortage,
+    }));
+  const missingTotal = domainStatus.reduce((sum, d) => sum + d.shortage, 0);
+  const isReady =
+    requiredDomains.length === 7 &&
+    totalRequired === 30 &&
+    missingTotal === 0 &&
+    fulfilledCount === totalRequired &&
+    domainStatus.every((d) => d.isComplete && d.available >= d.required);
+
+  return {
+    isReady,
+    totalRequired,
+    totalAvailable,
+    totalInBank,
+    draftCount,
+    archivedCount,
+    fulfilledCount,
+    domainStatus,
+    missingDomains,
+    missingTotal,
+  };
+}
+
+/**
+ * Generates a balanced, stage-isolated exam for a specific student according to
+ * Season 1's 30-question domain blueprint:
+ * - اللغة العربية: 5
+ * - الرياضيات: 5
+ * - العلوم: 4
+ * - الدراسات الاجتماعية ومصر: 4
+ * - اللغة الإنجليزية: 4
+ * - الثقافة العامة: 4
+ * - التفكير المنطقي والمهارات الذهنية: 4
+ * Total = 30 questions, randomized order & randomized options per student.
+ * Strictly prevents duplicate questions and blocks exam generation if any domain is incomplete.
  */
 export function generateBalancedStudentExam(
   allQuestions: QualifierQuestion[],
   student: StudentProfile,
   settings: CompetitionSettings
 ): QualifierQuestion[] {
-  const studentStage = student.stage || resolveStageFromGrade(student.grade);
   const rand = createSeededRandom(`${student.participationCode}-${student.id}`);
 
-  // Filter questions appropriate for the student's stage (never mix stages inappropriately)
-  const stagePool = allQuestions.filter((q) => {
-    if (q.stage && q.stage !== 'all' && q.stage !== studentStage) return false;
-    return true;
-  });
+  const eligibleGrades: GradeNumber[] =
+    settings.participatingGrades && settings.participatingGrades.length > 0
+      ? settings.participatingGrades
+      : ['4', '5', '6'];
 
-  const poolToUse = stagePool.length >= 16 ? stagePool : allQuestions;
+  // Strictly deduplicated pool for Season 1 (no duplicate IDs or question texts)
+  const poolToUse = getDeduplicatedSeasonOnePool(allQuestions, eligibleGrades);
 
-  // Group by domain and difficulty to preserve 100% fairness across all students
-  const domains: QualifierDomain[] = [
-    'science',
-    'math',
-    'arabic',
-    'egypt_world',
-    'logic',
-    'observation',
-    'general_culture',
-    'technology',
+  // Enforce Blueprint Readiness: never generate an official exam if any domain has a shortage
+  const readiness = evaluateSeasonOneQuestionBankReadiness(poolToUse, settings);
+  if (!readiness.isReady) {
+    return [];
+  }
+
+  const blueprint = settings.qualifierBlueprint || {
+    arabic: 5,
+    math: 5,
+    science: 4,
+    egypt_world: 4,
+    english: 4,
+    general_culture: 4,
+    logic: 4,
+  };
+
+  const quotaOrder: { domain: QualifierDomain; count: number }[] = [
+    { domain: 'arabic', count: blueprint.arabic ?? 5 },
+    { domain: 'math', count: blueprint.math ?? 5 },
+    { domain: 'science', count: blueprint.science ?? 4 },
+    { domain: 'egypt_world', count: blueprint.egypt_world ?? 4 },
+    { domain: 'english', count: blueprint.english ?? 4 },
+    { domain: 'general_culture', count: blueprint.general_culture ?? 4 },
+    { domain: 'logic', count: blueprint.logic ?? 4 },
   ];
 
-  const targetTotal = settings.questionsCountPerExam || 50;
+  const targetTotal = settings.questionsCountPerExam || 30;
   const selectedQuestions: QualifierQuestion[] = [];
+  const selectedIds = new Set<string>();
+  const selectedTexts = new Set<string>();
 
-  domains.forEach((dom) => {
-    const domQuestions = poolToUse.filter((q) => q.domain === dom);
+  for (const { domain, count } of quotaOrder) {
+    const domQuestions = poolToUse.filter(
+      (q) => q.domain === domain && !selectedIds.has(q.id) && !selectedTexts.has(q.question.trim())
+    );
     const easyQs = seededShuffle(
       domQuestions.filter((q) => q.difficulty === 'easy'),
       rand
@@ -266,34 +560,57 @@ export function generateBalancedStudentExam(
       rand
     );
 
-    // Pick balanced difficulty from each domain
-    const combinedDom = [...easyQs, ...mediumQs, ...hardQs];
-    selectedQuestions.push(...combinedDom);
-  });
+    const combinedDom = seededShuffle([...easyQs, ...mediumQs, ...hardQs], rand);
+    const picked = combinedDom.slice(0, count);
+    if (picked.length < count) {
+      // Never repeat a question or borrow from another domain if a domain is short
+      return [];
+    }
+    picked.forEach((q) => {
+      selectedIds.add(q.id);
+      selectedTexts.add(q.question.trim());
+      selectedQuestions.push(q);
+    });
+  }
+
+  if (selectedQuestions.length !== targetTotal) {
+    return [];
+  }
 
   const sliced = selectedQuestions.slice(0, targetTotal);
 
-  // Randomize question order within difficulty tiers or globally if enabled
+  // Randomize question order if enabled
   const orderedQuestions =
     settings.randomizeQuestionsOrder !== false ? seededShuffle(sliced, rand) : sliced;
 
-  // Optionally shuffle the 4 choices per question while keeping correctIndex accurate
+  // Optionally shuffle the 4 choices per question while tracking original option index (0..3)
+  // WITHOUT exposing or requiring `correctIndex` on the client!
   if (settings.randomizeOptionsOrder !== false) {
     return orderedQuestions.map((q) => {
       const indexedOptions = q.options.map((text, idx) => ({
         text,
-        isCorrect: idx === q.correctIndex,
+        originalIndex: idx,
+        isCorrect: typeof q.correctIndex === 'number' ? idx === q.correctIndex : false,
       }));
       const shuffledOpts = seededShuffle(indexedOptions, rand);
-      return {
+      const resultQ: QualifierQuestion = {
         ...q,
         options: shuffledOpts.map((o) => o.text),
-        correctIndex: shuffledOpts.findIndex((o) => o.isCorrect),
+        optionOriginalIndices: shuffledOpts.map((o) => o.originalIndex),
       };
+      if (typeof q.correctIndex === 'number') {
+        resultQ.correctIndex = shuffledOpts.findIndex((o) => o.isCorrect);
+      } else {
+        delete resultQ.correctIndex;
+      }
+      return resultQ;
     });
   }
 
-  return orderedQuestions;
+  return orderedQuestions.map((q) => ({
+    ...q,
+    optionOriginalIndices: [0, 1, 2, 3],
+  }));
 }
 
 // ============================================================================
@@ -307,13 +624,15 @@ export function gradeStudentExamAutomatically(
   elapsedSeconds: number,
   entryTimestamp: string,
   autoSubmittedOnTimeout: boolean,
-  settings: CompetitionSettings
+  settings: CompetitionSettings,
+  verifiedCorrectQuestionIds?: Set<string>
 ): StudentProfile {
   const domainCorrect: Record<QualifierDomain, number> = {
     science: 0,
     math: 0,
     arabic: 0,
     egypt_world: 0,
+    english: 0,
     logic: 0,
     observation: 0,
     general_culture: 0,
@@ -325,6 +644,7 @@ export function gradeStudentExamAutomatically(
     math: 0,
     arabic: 0,
     egypt_world: 0,
+    english: 0,
     logic: 0,
     observation: 0,
     general_culture: 0,
@@ -334,57 +654,76 @@ export function gradeStudentExamAutomatically(
   let correctCount = 0;
   let wrongCount = 0;
   let unansweredCount = 0;
-  let rawPoints = 0;
-  let maxPossiblePoints = 0;
+
+  const questionVersions = examQuestions.map((q) => {
+    const chosenDisplayedIdx = answers[q.id];
+    const hasChosen =
+      chosenDisplayedIdx !== undefined &&
+      chosenDisplayedIdx !== null &&
+      Number.isInteger(chosenDisplayedIdx);
+    const originalOptionIdx =
+      hasChosen && Array.isArray(q.optionOriginalIndices)
+        ? q.optionOriginalIndices[chosenDisplayedIdx] ?? chosenDisplayedIdx
+        : hasChosen
+        ? chosenDisplayedIdx
+        : null;
+
+    return {
+      questionId: q.id,
+      version: typeof q.version === 'number' && q.version > 0 ? q.version : 1,
+      domain: q.domain,
+      selectedOptionIndex: originalOptionIdx,
+    };
+  });
 
   examQuestions.forEach((q) => {
     domainTotal[q.domain] = (domainTotal[q.domain] || 0) + 1;
-    const diffMultiplier =
-      settings.scoringMethod === 'difficulty_weighted'
-        ? q.difficulty === 'hard'
-          ? 1.25
-          : q.difficulty === 'medium'
-          ? 1.1
-          : 1
-        : 1;
-    const questionPoints = Math.round(q.points * diffMultiplier);
-    maxPossiblePoints += questionPoints;
 
     const chosen = answers[q.id];
     if (chosen === undefined || chosen === null) {
+      // Unanswered = 0 points (no penalty)
       unansweredCount++;
-    } else if (chosen === q.correctIndex) {
-      correctCount++;
-      domainCorrect[q.domain] = (domainCorrect[q.domain] || 0) + 1;
-      rawPoints += questionPoints;
     } else {
-      wrongCount++;
+      // Priority 1: Verified against protected Firestore `question_answer_keys` collection
+      // Priority 2: Fallback only if question has local `correctIndex` (e.g. isolated practice mode)
+      const isVerifiedCorrect = verifiedCorrectQuestionIds
+        ? verifiedCorrectQuestionIds.has(q.id)
+        : typeof q.correctIndex === 'number' && chosen === q.correctIndex;
+
+      if (isVerifiedCorrect) {
+        // Base score = exact number of correct answers (1 point per correct answer)
+        correctCount++;
+        domainCorrect[q.domain] = (domainCorrect[q.domain] || 0) + 1;
+      } else {
+        // Wrong answer = 0 points (no negative penalty, no risk deduction)
+        wrongCount++;
+      }
     }
   });
 
-  const maxDurationSec = Math.max(60, settings.qualifierDurationMinutes * 60);
-  const speedRatio = Math.max(0.55, 1 - elapsedSeconds / (maxDurationSec * 1.25));
-  const speedScore = Math.min(99, Math.round(speedRatio * 100));
+  const maxDurationSec = Math.max(60, (settings.qualifierDurationMinutes || 30) * 60);
+  const speedRatio = Math.max(0.1, 1 - elapsedSeconds / maxDurationSec);
+  const speedScore = Math.max(1, Math.min(99, Math.round(speedRatio * 100)));
 
-  // If scoring method includes speed bonus
-  const speedBonus =
-    settings.scoringMethod === 'speed_weighted' && correctCount > 0
-      ? Math.round((speedScore / 100) * 25)
+  // Season 1 Official Scoring Rule:
+  // Base Score = number of correct answers (out of 30).
+  // Wrong = 0, Unanswered = 0, No risk deduction, Speed is strictly a tie-breaker!
+  const finalTotalPoints = correctCount;
+  const totalQuestionsCount = examQuestions.length || settings.questionsCountPerExam || 30;
+  const percentage =
+    totalQuestionsCount > 0
+      ? Math.min(100, Math.round((correctCount / totalQuestionsCount) * 100))
       : 0;
 
-  const finalTotalPoints = rawPoints + speedBonus;
-  const percentage =
-    maxPossiblePoints > 0 ? Math.min(100, Math.round((rawPoints / maxPossiblePoints) * 100)) : 0;
-
   const pctDomain = (dom: QualifierDomain) =>
-    domainTotal[dom] > 0 ? Math.round((domainCorrect[dom] / domainTotal[dom]) * 100) : 80;
+    domainTotal[dom] > 0 ? Math.round((domainCorrect[dom] / domainTotal[dom]) * 100) : 0;
 
   const earnedBadges: string[] = [];
   if (pctDomain('science') >= 80) earnedBadges.push('🔬 عبقري العلوم');
   if (pctDomain('logic') >= 80) earnedBadges.push('🧠 عبقري المنطق');
   if (pctDomain('math') >= 80) earnedBadges.push('➗ عبقري الحساب');
-  if (pctDomain('observation') >= 80) earnedBadges.push('👁️ عين الصقر');
   if (pctDomain('arabic') >= 80) earnedBadges.push('📚 عبقري اللغة');
+  if (pctDomain('english') >= 80) earnedBadges.push('🌐 متميز اللغة الإنجليزية');
   if (speedScore >= 90 && percentage >= 70) earnedBadges.push('⚡ أسرع بديهة');
   if (earnedBadges.length === 0) earnedBadges.push('🌟 مشارك متميز');
 
@@ -421,6 +760,7 @@ export function gradeStudentExamAutomatically(
       submitTimestamp,
       autoSubmittedOnTimeout,
       questionOrderIds: examQuestions.map((q) => q.id),
+      questionVersions,
     },
     scores: {
       total: finalTotalPoints,
@@ -431,6 +771,7 @@ export function gradeStudentExamAutomatically(
       observation: pctDomain('observation'),
       math: pctDomain('math'),
       egypt_world: pctDomain('egypt_world'),
+      english: pctDomain('english'),
       general_culture: pctDomain('general_culture'),
       technology: pctDomain('technology'),
     },
@@ -489,7 +830,7 @@ export function runAutomatedRankingAndQualification(
       nextLevel: 'republic',
     },
     republic: {
-      title: '🏆 البطولة النهائية الكبرى — استوديو العباقرة',
+      title: '🏆 البطولة النهائية الكبرى — استوديو دماغ عالية',
       nextLevel: 'republic',
     },
   };
@@ -522,9 +863,10 @@ export function runAutomatedRankingAndQualification(
     const administrationRank = adminStageCounters.get(adminKey)!;
     const governorateRank = govStageCounters.get(govKey)!;
 
-    // Qualified if completed qualifier, within stage quota, and score >= minimum threshold (e.g., 250)
+    // Qualified if completed qualifier, within stage quota, and score >= minimum threshold (50% of 30 = 15)
+    const minPassScore = (settings.questionsCountPerExam || 30) <= 50 ? 15 : 250;
     const isQualified =
-      stu.completedQualifier && stageRank <= stageQuota && stu.scores.total >= 250;
+      stu.completedQualifier && stageRank <= stageQuota && stu.scores.total >= minPassScore;
 
     // Check if there is an exact tie in points AND duration with adjacent student
     const prevStu = globalIdx > 0 ? sortedGlobal[globalIdx - 1] : null;
@@ -554,14 +896,19 @@ export function runAutomatedRankingAndQualification(
 
     const nextInfo = nextLevelMap[currentLevel];
 
-    // Add automatic national/governorate badges if top ranked
+    // Add automatic national/governorate badges if top ranked after completing qualifier
     const updatedBadges = new Set(stu.badges || []);
-    updatedBadges.add('🏅 أول مشاركة');
-    if (governorateRank === 1 && stu.scores.total >= 350) {
-      updatedBadges.add('🏆 بطل المحافظة');
-    }
-    if (stageRank <= 3 && stu.scores.total >= 400) {
-      updatedBadges.add('🇪🇬 بطل الجمهورية');
+    const is30PointScale = (settings.questionsCountPerExam || 30) <= 50;
+    const govChampThreshold = is30PointScale ? 24 : 350;
+    const repChampThreshold = is30PointScale ? 27 : 400;
+    if (stu.completedQualifier) {
+      updatedBadges.add('🏅 أول مشاركة');
+      if (governorateRank === 1 && stu.scores.total >= govChampThreshold) {
+        updatedBadges.add('🏆 بطل المحافظة');
+      }
+      if (stageRank <= 3 && stu.scores.total >= repChampThreshold) {
+        updatedBadges.add('🇪🇬 بطل الجمهورية');
+      }
     }
 
     return {
@@ -574,7 +921,7 @@ export function runAutomatedRankingAndQualification(
       administrationRank,
       governorateRank,
       qualifiedForFinals: isQualified,
-      qualifiedLevel: isQualified ? nextInfo.nextLevel : 'none',
+      qualifiedLevel: (isQualified ? nextInfo.nextLevel : 'none') as HierarchyLevel | 'none',
       tieBreakerNeeded: isExactTie,
       badges: Array.from(updatedBadges),
       nextRoundInfo: isQualified
@@ -698,13 +1045,13 @@ export function computeAggregatedRankings(
 
       // Composite formula: rewards average quality + qualified students + podium winners, with capped participation bonus
       const cappedParticipationBonus = Math.min(
-        activeFormula.maxParticipationCapBonus,
+        activeFormula.maxParticipationCapBonus ?? 90,
         stuList.length * 18
       );
       const compositePoints = Math.round(
-        avgScore * activeFormula.avgStudentPointsWeight +
-          qualified.length * activeFormula.qualifiedStudentsBonus +
-          topThree.length * activeFormula.topThreePodiumBonus +
+        avgScore * (activeFormula.avgStudentPointsWeight ?? 1.5) +
+          qualified.length * (activeFormula.qualifiedStudentsBonus ?? 45) +
+          topThree.length * (activeFormula.topThreePodiumBonus ?? 85) +
           cappedParticipationBonus
       );
 
@@ -748,92 +1095,12 @@ export function computeAggregatedRankings(
 }
 
 // ============================================================================
-// 6. 📋 INITIAL DEMO AUDIT LOGS & SPECIAL CASE ALERTS
+// 6. 📋 INITIAL REAL AUDIT LOGS & SPECIAL CASE ALERTS (NO FAKE DATA)
 // ============================================================================
 
-export const INITIAL_SPECIAL_CASES: SpecialCaseAlert[] = [
-  {
-    id: 'sc-1',
-    type: 'interrupted_exam',
-    studentId: 'stu-5',
-    studentName: 'ياسين طارق عبد العزيز',
-    participationCode: 'OM-508',
-    schoolName: 'مدرسة المتفوقين الرسمية للغات',
-    governorate: 'الإسكندرية',
-    stage: 'primary_upper',
-    description: 'انقطع الاتصال بالإنترنت عند السؤال رقم 38 (تبقّى 9 دقائق). تم حفظ الـ38 إجابة تلقائياً بواسطة النظام.',
-    createdAt: 'منذ ١٢ دقيقة',
-    status: 'pending',
-  },
-  {
-    id: 'sc-2',
-    type: 'duplicate_attempt',
-    studentId: 'stu-1',
-    studentName: 'يوسف أحمد محمود',
-    participationCode: 'OM-601',
-    schoolName: 'مدرسة النيل الدولية للغات',
-    governorate: 'الجيزة',
-    stage: 'primary_upper',
-    description: 'محاولة دخول ثانية بنفس كود المشاركة بعد تسليم الاختبار. قام النظام بحظر المحاولة تلقائياً لحماية نزاهة التصفيات.',
-    createdAt: 'منذ ٢٥ دقيقة',
-    status: 'pending',
-  },
-  {
-    id: 'sc-3',
-    type: 'tie_breaker_needed',
-    studentName: 'سلمى وائل فؤاد ⚖️ نوران سامح',
-    participationCode: 'OM-401 / OM-409',
-    schoolName: 'مدرسة سموحة الرسمية للغات',
-    governorate: 'الإسكندرية',
-    stage: 'primary_upper',
-    description: 'تعادل في مجموع النقاط (420 نقطة) وزمن الإجابة على الحد الفاصل للتأهل. جاهز لإرسال سؤال فاصل إلكتروني.',
-    createdAt: 'منذ ٤٠ دقيقة',
-    status: 'pending',
-  },
-];
+export const INITIAL_SPECIAL_CASES: SpecialCaseAlert[] = [];
 
-export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
-  {
-    id: 'log-1',
-    category: 'season_state_change',
-    actor: '👩‍💼 المشرفة العامة',
-    title: 'إعداد وتفعيل موسم التصفيات الإلكترونية الذاتية',
-    details: 'تم ضبط إعدادات الموسم (ابتدائي صغير، ابتدائي كبير، إعدادي، ثانوي) وتفعيل بنك الأسئلة العشوائي المتوازن.',
-    timestamp: '٠٩:٠٠ ص',
-  },
-  {
-    id: 'log-2',
-    category: 'student_register',
-    actor: '🤖 النظام الذاتي',
-    title: 'تسجيل وتوزيع تلقائي للطلاب على المراحل والمحافظات',
-    details: 'تم تسكين الطلاب المسجلين تلقائياً في مجموعات (المرحلة ← الصف ← المحافظة ← الإدارة ← المدرسة) دون تدخل يدوي.',
-    timestamp: '٠٩:٣٠ ص',
-  },
-  {
-    id: 'log-3',
-    category: 'exam_start',
-    actor: '🤖 النظام الذاتي',
-    title: 'توليد نماذج اختبارات عشوائية متكافئة الصعوبة',
-    details: 'تم توليد نماذج التصفيات مع خلط ترتيب الأسئلة والاختيارات لكل طالب مع الحفاظ على نفس توزيع المجالات والدرجات.',
-    timestamp: '١٠:٠٠ ص',
-  },
-  {
-    id: 'log-4',
-    category: 'auto_grade',
-    actor: '🤖 النظام الذاتي',
-    title: 'التصحيح الآلي الفوري وحساب السرعة والمجالات',
-    details: 'قام محرك التصحيح بحساب الدرجات، النسب المئوية، متوسط زمن السؤال، وترتيب الطلاب تلقائياً فور انتهاء الوقت.',
-    timestamp: '١٠:٣٥ ص',
-  },
-  {
-    id: 'log-5',
-    category: 'auto_qualify',
-    actor: '🤖 النظام الذاتي',
-    title: 'فرز وترتيب المتأهلين تلقائياً حسب حصص كل مرحلة',
-    details: 'تم تحديد قائمة المتأهلين الأوائل في كل مرحلة تعليمية وتجهيز النتائج للمراجعة النهائية من المشرفة العامة.',
-    timestamp: '١٠:٤٠ ص',
-  },
-];
+export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [];
 
 export const SEASON_STATUS_META: Record<
   SeasonLifecycleStatus,

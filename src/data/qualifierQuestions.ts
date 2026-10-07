@@ -4,53 +4,59 @@ export const DOMAIN_META: Record<
   QualifierDomain,
   { label: string; targetCount: number; color: string; description: string }
 > = {
-  general_culture: {
-    label: 'الثقافة العامة والرياضة والفنون',
-    targetCount: 10,
-    color: '#14B8A6',
-    description: 'الرياضة وكرة القدم، الألعاب الأولمبية، الفنون، الألوان، والمعلومات الشيقة (١٠ أسئلة)',
-  },
-  egypt_world: {
-    label: 'مصر والدراسات الاجتماعية',
-    targetCount: 9,
-    color: '#F97316',
-    description: 'معالم مصر الجميلة، المحافظات، السلوكيات الاجتماعية، والعالم من حولنا (٩ أسئلة)',
-  },
   arabic: {
-    label: 'اللغة العربية والأدب',
-    targetCount: 6,
+    label: 'اللغة العربية',
+    targetCount: 5,
     color: '#F59E0B',
-    description: 'الكلمات المعبرة، الأضداد، الجمع والمفرد، والنحو المبسط (٦ أسئلة)',
+    description: 'المفردات، الأضداد، التراكيب اللغوية، والنحو المبسط (٥ أسئلة)',
   },
   math: {
-    label: 'Math & Mental Calculation (الحساب بالـ English)',
-    targetCount: 6,
+    label: 'الرياضيات',
+    targetCount: 5,
     color: '#38BDF8',
-    description: 'Numbers, Fractions, Geometry & Everyday Math in English for Grades 4, 5 & 6 (٦ أسئلة)',
+    description: 'الأعداد، الكسور، الهندسة، والحساب الذهني للصفوف ٤ و٥ و٦ (٥ أسئلة)',
+  },
+  science: {
+    label: 'العلوم',
+    targetCount: 4,
+    color: '#10B981',
+    description: 'الكائنات الحية، الطاقة، الفضاء، وجسم الإنسان والبيئة (٤ أسئلة)',
+  },
+  egypt_world: {
+    label: 'التاريخ والجغرافيا والدراسات الاجتماعية',
+    targetCount: 4,
+    color: '#F97316',
+    description: 'تاريخ مصر وجغرافيتها، المحافظات، والمعالم الحضارية والوطنية (٤ أسئلة)',
+  },
+  english: {
+    label: 'اللغة الإنجليزية',
+    targetCount: 4,
+    color: '#06B6D4',
+    description: 'English Vocabulary, Grammar & Reading Comprehension for Grades 4, 5 & 6 (٤ أسئلة)',
+  },
+  general_culture: {
+    label: 'المعلومات العامة والثقافة',
+    targetCount: 4,
+    color: '#14B8A6',
+    description: 'الثقافة العامة، الفنون، الرياضة، والمعلومات المتنوعة (٤ أسئلة)',
   },
   logic: {
-    label: 'الذكاء والتفكير المنطقي',
-    targetCount: 6,
+    label: 'الذكاء والمنطق',
+    targetCount: 4,
     color: '#A855F7',
-    description: 'فوازير ذكية، ترتيب المواقف، وحل المشكلات اليومية المبسطة (٦ أسئلة)',
+    description: 'التفكير المنطقي، الأنماط، الاستنتاج، وحل المشكلات (٤ أسئلة)',
   },
   observation: {
     label: 'قوة الملاحظة والتركيز',
-    targetCount: 6,
+    targetCount: 0,
     color: '#EC4899',
-    description: 'اكتشاف الشكل المختلف، عد الرموز، ودقة الانتباه البصري (٦ أسئلة)',
-  },
-  science: {
-    label: 'Science & Nature (العلوم بالـ English)',
-    targetCount: 5,
-    color: '#10B981',
-    description: 'Animals, Plants, Space, Human Body & Energy in English for Language School (٥ أسئلة)',
+    description: 'دقة الملاحظة البصرية والأنماط (مدمجة ضمن الذكاء والمنطق)',
   },
   technology: {
     label: 'التكنولوجيا والحياة الرقمية',
-    targetCount: 2,
+    targetCount: 0,
     color: '#6366F1',
-    description: 'الاستخدام الآمن للإنترنت وأساسيات الحاسوب المبسطة للأطفال (سؤالان)',
+    description: 'المهارات الرقمية وأساسيات الحاسوب (مدمجة ضمن المعلومات العامة)',
   },
 };
 
@@ -635,6 +641,7 @@ function buildInterleavedQuestions(pool: QualifierQuestion[]): QualifierQuestion
     egypt_world: [],
     arabic: [],
     math: [],
+    english: [],
     logic: [],
     observation: [],
     science: [],
@@ -646,13 +653,14 @@ function buildInterleavedQuestions(pool: QualifierQuestion[]): QualifierQuestion
   });
 
   const domainCycle: QualifierDomain[] = [
-    'general_culture',
-    'egypt_world',
     'arabic',
     'math',
+    'science',
+    'egypt_world',
+    'english',
+    'general_culture',
     'logic',
     'observation',
-    'science',
     'technology',
   ];
 
@@ -1095,10 +1103,9 @@ export const STAGE_SPECIFIC_QUESTIONS: QualifierQuestion[] = [
   },
 ];
 
-export const ALL_STAGE_QUALIFIER_QUESTIONS: QualifierQuestion[] = [
-  ...STAGE_SPECIFIC_QUESTIONS,
-  ...QUALIFIER_50_QUESTIONS.map((q) => ({ ...q, stage: q.stage || ('primary_upper' as EducationalStage) })),
-];
+// Official Season 1 Question Bank is strictly sourced from Firestore (`platform/custom_questions`).
+// Static hardcoded questions are NEVER injected into official qualifier exams.
+export const ALL_STAGE_QUALIFIER_QUESTIONS: QualifierQuestion[] = [];
 
 export function getPracticeQuestionsForStage(stage: EducationalStage): QualifierQuestion[] {
   const stageSpecific = STAGE_SPECIFIC_QUESTIONS.filter((q) => q.stage === stage);

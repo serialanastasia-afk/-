@@ -1,0 +1,335 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Primitive Helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Bootstrapped Admin + Trusted /admins/{uid} Role Document Verification
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'serialanastasia@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow get: if isValidId(docId);
+      allow list, create, update, delete: if false;
+    }
+
+    // Trusted Admin/Supervisor Roles Collection
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (request.auth.uid == adminUid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(adminUid)
+        && incoming().uid is string && incoming().uid == adminUid && incoming().uid.size() <= 128
+        && incoming().email is string && incoming().email.size() <= 200
+        && incoming().role in ['admin', 'supervisor'];
+      allow delete: if isAdmin() && isValidId(adminUid);
+    }
+
+    // Validation Blueprint for StudentProfile
+    function isValidStudent(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 20
+        && data.participationCode is string && data.participationCode.size() >= 1 && data.participationCode.size() <= 60
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && (!('schoolName' in data) || (data.schoolName is string && data.schoolName.size() <= 200))
+        && (!('governorate' in data) || (data.governorate is string && data.governorate.size() <= 100))
+        && (!('administration' in data) || (data.administration is string && data.administration.size() <= 160))
+        && (!('xp' in data) || (data.xp is number && data.xp >= 0 && data.xp <= 2000))
+        && (!('achievementsCount' in data) || (data.achievementsCount is number && data.achievementsCount >= 0 && data.achievementsCount <= 20))
+        && (!('completedQualifier' in data) || data.completedQualifier is bool)
+        && (!('attemptsUsed' in data) || (data.attemptsUsed is number && data.attemptsUsed >= 0 && data.attemptsUsed <= 10))
+        && (!('badges' in data) || (data.badges is list && data.badges.size() <= 20))
+        && (data.scores is map
+            && data.scores.total is number && data.scores.total >= 0 && data.scores.total <= 2000
+            && data.scores.speedScore is number && data.scores.speedScore >= 0 && data.scores.speedScore <= 500);
+    }
+
+    // Strict Initial Zero-State Check for Student Registration
+    function isZeroInitialStudentState(data, docId) {
+      return ((isSignedIn() && data.ownerUid == request.auth.uid) || data.ownerUid == docId)
+        && data.completedQualifier == false
+        && (!('attemptsUsed' in data) || data.attemptsUsed == 0)
+        && (!('xp' in data) || data.xp == 0)
+        && (!('achievementsCount' in data) || data.achievementsCount == 0)
+        && data.scores.total == 0
+        && data.scores.speedScore == 0
+        && data.badges.size() == 0;
+    }
+
+    // Strict Single-Submission Grading Integrity Check (Prevents arbitrary XP/Score tampering & enforces Terminal State Lock)
+    function isValidSingleQualifierSubmission(data, prev, docId) {
+      return ((isSignedIn() && prev.ownerUid == request.auth.uid) || prev.ownerUid == docId)
+        && data.ownerUid == prev.ownerUid
+        && data.id == prev.id
+        && data.name == prev.name
+        && data.grade == prev.grade
+        && data.participationCode == prev.participationCode
+        && prev.completedQualifier == false
+        && data.completedQualifier == true
+        && data.attemptsUsed == 1
+        && ('gradingReport' in data)
+        && data.gradingReport is map
+        && data.gradingReport.correctCount is number
+        && data.gradingReport.wrongCount is number
+        && data.gradingReport.unansweredCount is number
+        && data.gradingReport.correctCount >= 0
+        && data.gradingReport.correctCount <= 30
+        && data.gradingReport.wrongCount >= 0
+        && data.gradingReport.wrongCount <= 30
+        && data.gradingReport.unansweredCount >= 0
+        && data.gradingReport.unansweredCount <= 30
+        && (data.gradingReport.correctCount + data.gradingReport.wrongCount + data.gradingReport.unansweredCount) == 30
+        && data.gradingReport.rawPoints is number
+        && data.gradingReport.rawPoints == data.gradingReport.correctCount
+        && data.scores.total == data.gradingReport.rawPoints
+        && data.xp == data.scores.total
+        && data.achievementsCount == data.badges.size()
+        && (!('questionVersions' in data.gradingReport) || (data.gradingReport.questionVersions is list && data.gradingReport.questionVersions.size() == 30));
+    }
+
+    // Strict Single-Submission Grading Integrity Check:
+    // Official exam grading is strictly executed by the Trusted Server Backend (authenticated as isAdmin()).
+    // Direct client-side updates to `/students/{studentId}` or `/leaderboard_students/{studentId}` are DENIED.
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && (
+        isAdmin() ||
+        (isSignedIn() && resource.data.ownerUid == request.auth.uid)
+      );
+      allow list: if isAdmin();
+
+      allow create: if isValidId(studentId)
+        && incoming().id == studentId
+        && isValidStudent(incoming())
+        && (isAdmin() || isZeroInitialStudentState(incoming(), studentId));
+
+      // Terminal State Lock & Server-Only Grading:
+      // Non-admin clients CANNOT update student scores, XP, gradingReport, or completedQualifier directly!
+      // All official exam grading goes through `/api/exam/submit` on the Trusted Backend (`isAdmin()`).
+      allow update: if isAdmin()
+        && isValidId(studentId)
+        && incoming().id == studentId
+        && isValidStudent(incoming());
+
+      allow delete: if isAdmin() && isValidId(studentId);
+    }
+
+    // =========================================================================
+    // 2. PUBLIC SANITIZED LEADERBOARD (/leaderboard_students/{studentId})
+    // Contains ONLY public leaderboard fields (name, schoolName, governorate, stage, scores, xp, badges).
+    // NO parentPhone, NO gradingReport answers, NO private administrative notes.
+    // =========================================================================
+    function isValidLeaderboardStudent(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 20
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && !('parentPhone' in data)
+        && !('gradingReport' in data)
+        && data.completedQualifier is bool
+        && data.scores is map
+        && data.scores.total is number && data.scores.total >= 0 && data.scores.total <= 2000
+        && data.scores.speedScore is number && data.scores.speedScore >= 0 && data.scores.speedScore <= 500;
+    }
+
+    match /leaderboard_students/{studentId} {
+      allow get, list: if true;
+
+      allow create: if isValidId(studentId)
+        && incoming().id == studentId
+        && isValidLeaderboardStudent(incoming())
+        && (
+          isAdmin() ||
+          (incoming().completedQualifier == false && incoming().scores.total == 0 && (!('xp' in incoming()) || incoming().xp == 0))
+        );
+
+      // Only the Trusted Server Backend / Admin (`isAdmin()`) can update leaderboard scores after grading!
+      allow update: if isAdmin()
+        && isValidId(studentId)
+        && incoming().id == studentId
+        && isValidLeaderboardStudent(incoming());
+
+      allow delete: if isAdmin() && isValidId(studentId);
+    }
+
+    // =========================================================================
+    // 3. SCHOOLS: SPLIT BETWEEN ADMIN (/schools) AND PUBLIC (/public_schools)
+    // =========================================================================
+    function isValidSchool(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 200
+        && data.governorate is string && data.governorate.size() >= 1 && data.governorate.size() <= 100
+        && (!('administration' in data) || (data.administration is string && data.administration.size() <= 160))
+        && (!('supervisorName' in data) || (data.supervisorName is string && data.supervisorName.size() <= 160))
+        && (!('schoolCode' in data) || (data.schoolCode is string && data.schoolCode.size() <= 60))
+        && (!('ownerUid' in data) || (data.ownerUid is string && data.ownerUid.size() <= 128));
+    }
+
+    // Administrative Schools Collection — ADMIN READ/UPDATE/DELETE ONLY
+    match /schools/{schoolId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(schoolId)
+        && incoming().id == schoolId
+        && isValidSchool(incoming());
+      allow update, delete: if isAdmin() && isValidId(schoolId);
+    }
+
+    // Public Schools Directory — Public Read (No private supervisor data required)
+    match /public_schools/{schoolId} {
+      allow get, list: if true;
+      allow create: if isValidId(schoolId)
+        && incoming().id == schoolId
+        && isValidSchool(incoming())
+        && !('supervisorPhone' in incoming());
+      allow update, delete: if isAdmin() && isValidId(schoolId);
+    }
+
+    // =========================================================================
+    // 4. TEAMS: SPLIT BETWEEN ADMIN (/teams) AND PUBLIC (/public_teams)
+    // =========================================================================
+    function isValidTeam(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.points is number && data.points >= 0 && data.points <= 50000
+        && data.wins is number && data.wins >= 0 && data.wins <= 1000
+        && data.members is list && data.members.size() >= 1 && data.members.size() <= 6
+        && (!('ownerUid' in data) || (data.ownerUid is string && data.ownerUid.size() <= 128));
+    }
+
+    // Administrative Teams Collection — ADMIN READ/UPDATE/DELETE ONLY
+    match /teams/{teamId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(teamId)
+        && incoming().id == teamId
+        && isValidTeam(incoming())
+        && (isAdmin() || (incoming().points == 0 && incoming().wins == 0));
+      allow update: if isAdmin() && isValidId(teamId) && isValidTeam(incoming());
+      allow delete: if isAdmin() && isValidId(teamId);
+    }
+
+    // Public Teams Leaderboard — Public Read, Zero Initial Points on Create, Admin Update/Delete
+    match /public_teams/{teamId} {
+      allow get, list: if true;
+      allow create: if isValidId(teamId)
+        && incoming().id == teamId
+        && isValidTeam(incoming())
+        && (isAdmin() || (incoming().points == 0 && incoming().wins == 0));
+      allow update: if isAdmin() && isValidId(teamId) && isValidTeam(incoming());
+      allow delete: if isAdmin() && isValidId(teamId);
+    }
+
+    // =========================================================================
+    // 5. PLATFORM: SPLIT BETWEEN ADMIN (/platform) AND PUBLIC (/public_platform)
+    // - /platform/{docId} (custom_questions, internal admin settings, etc.) -> ADMIN ONLY
+    // - /public_platform/{docId} (public season status, public awards, public seasons_archive) -> Public Read, Admin Write
+    // =========================================================================
+    match /platform/{docId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(docId)
+        && incoming().id == docId
+        && incoming().id is string && incoming().id.size() <= 128;
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    match /public_platform/{docId} {
+      allow get, list: if true;
+      allow create, update: if isAdmin()
+        && isValidId(docId)
+        && incoming().id == docId
+        && incoming().id is string && incoming().id.size() <= 128
+        && (
+          docId != 'season_1' || (
+            !('scoringSettings' in incoming())
+            && !('createdAt' in incoming())
+            && (
+              !('examSettings' in incoming()) || (
+                !('randomizeQuestions' in incoming().examSettings)
+                && !('randomizeOptions' in incoming().examSettings)
+                && !('allowBackNavigation' in incoming().examSettings)
+              )
+            )
+          )
+        )
+        && (
+          // SECURITY ENFORCEMENT: `public_platform/custom_questions` MUST NEVER contain `items` (raw questions).
+          // It may ONLY contain the readiness summary counts so students can never download the question bank!
+          docId != 'custom_questions' || !('items' in incoming())
+        );
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    // =========================================================================
+    // 6. PRIVATE ANSWER KEY STORE (/question_answer_keys/{keyDocId})
+    // - STRICTLY ADMIN/SERVER-ONLY (`isAdmin()`) for ALL operations (`get`, `list`, `create`, `update`, `delete`).
+    // - Student clients CANNOT read or query `question_answer_keys` at all -> DENIED!
+    // =========================================================================
+    match /question_answer_keys/{keyDocId} {
+      allow get, list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(keyDocId);
+      allow delete: if isAdmin() && isValidId(keyDocId);
+    }
+
+    // =========================================================================
+    // 7. OFFICIAL EXAM ATTEMPTS (/exam_attempts/{attemptId})
+    // - Created and updated ONLY by the Trusted Backend (`isAdmin()`).
+    // - Student can `get` ONLY their own attempt (`resource.data.ownerUid == request.auth.uid`).
+    // - Student CANNOT `list`, `create`, `update`, or `delete` any attempt!
+    // =========================================================================
+    match /exam_attempts/{attemptId} {
+      allow get: if isValidId(attemptId) && (
+        isAdmin() ||
+        (isSignedIn() && resource.data.ownerUid == request.auth.uid)
+      );
+      allow list: if isAdmin();
+      allow create, update, delete: if isAdmin() && isValidId(attemptId);
+    }
+
+    // =========================================================================
+    // 8. PROJECTS (/projects/{projectId})
+    // Public can ONLY read published/coming_soon public projects (or Admin reads all).
+    // Create / Update / Delete are strictly Admin-only.
+    // =========================================================================
+    function isValidProject(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 200
+        && data.category in ['competition', 'project', 'game', 'app', 'invention']
+        && data.status in ['published', 'draft', 'coming_soon']
+        && (!('description' in data) || (data.description is string && data.description.size() <= 4000))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 60));
+    }
+
+    match /projects/{projectId} {
+      allow get, list: if resource.data.status in ['published', 'coming_soon'] || isAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(projectId)
+        && incoming().id == projectId
+        && isValidProject(incoming());
+      allow delete: if isAdmin() && isValidId(projectId);
+    }
+  }
+}

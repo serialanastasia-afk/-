@@ -21,11 +21,14 @@ import {
   Trophy,
   BarChart3,
   PieChart as PieChartIcon,
+  RotateCcw,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  ComposedChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -44,6 +47,8 @@ import {
   GradeNumber,
   QualifierDomain,
   DifficultyLevel,
+  QuestionReviewStatus,
+  OfficialPhaseTargetId,
   CompetitionAward,
   SpecialCaseAlert,
   AuditLogEntry,
@@ -51,8 +56,9 @@ import {
   EducationalStage,
   HierarchyLevel,
   AnnualPhaseId,
+  SeasonArchiveItem,
 } from '../types/competition';
-import { DOMAIN_META } from '../data/qualifierQuestions';
+import { DOMAIN_META, ALL_STAGE_QUALIFIER_QUESTIONS } from '../data/qualifierQuestions';
 import { APP_PROFILE_PRESETS, DEFAULT_ANNUAL_PHASES } from '../data/challengesData';
 import {
   STAGE_METADATA,
@@ -64,7 +70,13 @@ import {
   buildStudentGroupingPath,
   runAutomatedRankingAndQualification,
   computeAggregatedRankings,
+  evaluateSeasonOneQuestionBankReadiness,
+  validateOfficialQuestion,
 } from '../services/qualificationEngine';
+import {
+  deleteStudentFromCloud,
+  clearAllStudentsFromCloud,
+} from '../services/firebaseCloudSync';
 import { soundEngine } from '../utils/sound';
 
 interface AdminDashboardProps {
@@ -80,6 +92,8 @@ interface AdminDashboardProps {
   setMatches: React.Dispatch<React.SetStateAction<MatchItem[]>>;
   awards: CompetitionAward[];
   setAwards: React.Dispatch<React.SetStateAction<CompetitionAward[]>>;
+  seasonsArchive?: SeasonArchiveItem[];
+  setSeasonsArchive?: React.Dispatch<React.SetStateAction<SeasonArchiveItem[]>>;
   initialSection?: AdminSection;
   onTriggerGeniusAlarm: () => void;
 }
@@ -109,6 +123,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   setMatches,
   awards,
   setAwards,
+  seasonsArchive = [],
+  setSeasonsArchive,
   initialSection = 'overview',
   onTriggerGeniusAlarm,
 }) => {
@@ -119,7 +135,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // ⚠️ Special Cases & 📋 Audit Log State
   const [specialCases, setSpecialCases] = useState<SpecialCaseAlert[]>(() => {
     try {
-      const saved = localStorage.getItem('om_geniuses_special_cases_v1');
+      const saved = localStorage.getItem('om_geniuses_special_cases_real_v2');
       if (saved) return JSON.parse(saved);
     } catch {}
     return INITIAL_SPECIAL_CASES;
@@ -127,7 +143,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
     try {
-      const saved = localStorage.getItem('om_geniuses_audit_logs_v1');
+      const saved = localStorage.getItem('om_geniuses_audit_logs_real_v2');
       if (saved) return JSON.parse(saved);
     } catch {}
     return INITIAL_AUDIT_LOGS;
@@ -135,13 +151,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   React.useEffect(() => {
     try {
-      localStorage.setItem('om_geniuses_special_cases_v1', JSON.stringify(specialCases));
+      localStorage.setItem('om_geniuses_special_cases_real_v2', JSON.stringify(specialCases));
     } catch {}
   }, [specialCases]);
 
   React.useEffect(() => {
     try {
-      localStorage.setItem('om_geniuses_audit_logs_v1', JSON.stringify(auditLogs));
+      localStorage.setItem('om_geniuses_audit_logs_real_v2', JSON.stringify(auditLogs));
     } catch {}
   }, [auditLogs]);
 
@@ -175,29 +191,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [stuGrade, setStuGrade] = useState<GradeNumber>('5');
   const [stuClass, setStuClass] = useState('5 / أ');
   const [stuSchool, setStuSchool] = useState(
-    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+    settings.defaultSchoolName || ''
   );
   const [stuRegion, setStuRegion] = useState(settings.defaultRegion || 'القاهرة');
   const [stuCountry, setStuCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
 
-  // Add Question State
+  // Add / Edit Official Question State
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [qText, setQText] = useState('');
-  const [qDomain, setQDomain] = useState<QualifierDomain>('science');
+  const [qContextPassage, setQContextPassage] = useState('');
+  const [qExplanation, setQExplanation] = useState('');
+  const [qDomain, setQDomain] = useState<QualifierDomain>('arabic');
   const [qDiff, setQDiff] = useState<DifficultyLevel>('medium');
-  const [qPoints, setQPoints] = useState(15);
-  const [qTime, setQTime] = useState(35);
+  const [qGrade, setQGrade] = useState<GradeNumber | 'all'>('all');
+  const [qPhaseId, setQPhaseId] = useState<OfficialPhaseTargetId>('stage_1_qualifiers');
+  const [qReviewStatus, setQReviewStatus] = useState<QuestionReviewStatus>('approved');
+  const [qPublished, setQPublished] = useState<boolean>(true);
+  const [qPoints, setQPoints] = useState(1);
+  const [qTime, setQTime] = useState(60);
   const [qOpt0, setQOpt0] = useState('');
   const [qOpt1, setQOpt1] = useState('');
   const [qOpt2, setQOpt2] = useState('');
   const [qOpt3, setQOpt3] = useState('');
   const [qCorrect, setQCorrect] = useState(0);
+  const [qValidationErrors, setQValidationErrors] = useState<string[]>([]);
+
+  // Question Bank Filters
+  const [qFilterDomain, setQFilterDomain] = useState<'ALL' | QualifierDomain>('ALL');
+  const [qFilterGrade, setQFilterGrade] = useState<'ALL' | GradeNumber | 'all'>('ALL');
+  const [qFilterDiff, setQFilterDiff] = useState<'ALL' | DifficultyLevel>('ALL');
+  const [qFilterStatus, setQFilterStatus] = useState<'ALL' | QuestionReviewStatus>('ALL');
+  const [qFilterPhase, setQFilterPhase] = useState<'ALL' | OfficialPhaseTargetId>('ALL');
+  const [qSearchText, setQSearchText] = useState('');
 
   // Add Team State
   const [teamName, setTeamName] = useState('');
   const [teamEmblem, setTeamEmblem] = useState('🦁');
   const [teamColor, setTeamColor] = useState('#F59E0B');
   const [teamSchool, setTeamSchool] = useState(
-    settings.defaultSchoolName || 'مدرسة عيون مصر للغات'
+    settings.defaultSchoolName || ''
   );
   const [teamRegion, setTeamRegion] = useState(settings.defaultRegion || 'القاهرة');
   const [teamCountry, setTeamCountry] = useState(settings.defaultCountry || 'مصر 🇪🇬');
@@ -215,6 +247,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberGrade, setNewMemberGrade] = useState<GradeNumber>('5');
 
+  // New Season State
+  const [newSeasonTitle, setNewSeasonTitle] = useState('🧠 الموسم الجديد — دماغ عالية ٢٠٢٧');
+  const [newSeasonYear, setNewSeasonYear] = useState('2026 / 2027');
+  const [newSeasonStartDate, setNewSeasonStartDate] = useState('2026-09-15');
+  const [newSeasonEndDate, setNewSeasonEndDate] = useState('2027-06-30');
+  const [resetStudentsOnNewSeason, setResetStudentsOnNewSeason] = useState(false);
+
+  const effectiveSeasonsArchive: SeasonArchiveItem[] =
+    seasonsArchive && seasonsArchive.length > 0
+      ? seasonsArchive
+      : settings.seasonsArchive || [];
+
+  const handleActivateNewSeason = async () => {
+    if (!newSeasonTitle.trim()) return;
+    soundEngine.playFanfare();
+
+    // 1. Build archive snapshot of current season
+    const topStu = [...students].sort((a, b) => b.scores.total - a.scores.total)[0];
+    const topSchoolItem = aggregatedRankings.topSchools[0];
+    const topGovItem = aggregatedRankings.topGovernorates[0];
+
+    const archivedCurrentSeason: SeasonArchiveItem = {
+      id: settings.currentSeasonId || `season-${Date.now()}`,
+      seasonName: settings.seasonName || 'الموسم الأول — دماغ عالية',
+      title: settings.seasonName || 'الموسم الأول — دماغ عالية',
+      year: settings.seasonYear || '2025 / 2026',
+      startDate: settings.startDate || '2025-09-01',
+      endDate: settings.endDate || new Date().toISOString().slice(0, 10),
+      status: 'completed',
+      totalParticipants: students.length,
+      totalStudents: students.length,
+      totalSchools: uniqueSchoolsCount,
+      totalGovernorates: uniqueGovernoratesCount,
+      topSchoolName: topSchoolItem?.name || '',
+      championSchoolName: topSchoolItem?.name || '',
+      topGovernorateName: topGovItem?.name || '',
+      championGovernorate: topGovItem?.name || '',
+      championStudentName: topStu?.name || '',
+    };
+
+    const updatedArchive = [
+      archivedCurrentSeason,
+      ...effectiveSeasonsArchive.filter((a) => a.id !== archivedCurrentSeason.id),
+    ];
+
+    if (setSeasonsArchive) {
+      setSeasonsArchive(updatedArchive);
+    }
+
+    const resetPhases = DEFAULT_ANNUAL_PHASES.map((ph, idx) => ({
+      ...ph,
+      status: (idx === 0 ? 'active' : 'upcoming') as 'completed' | 'active' | 'upcoming',
+    }));
+
+    setSettings((prev) => ({
+      ...prev,
+      currentSeasonId: `season-${Date.now() + 1}`,
+      seasonName: newSeasonTitle.trim(),
+      seasonYear: newSeasonYear.trim() || '2026 / 2027',
+      startDate: newSeasonStartDate,
+      endDate: newSeasonEndDate,
+      seasonStatus: 'qualifiers_running',
+      resultsCertified: false,
+      activeAnnualPhaseId: 'phase_1_school',
+      currentHierarchyLevel: 'school',
+      annualPhases: resetPhases,
+      seasonsArchive: updatedArchive,
+    }));
+
+    if (resetStudentsOnNewSeason) {
+      await clearAllStudentsFromCloud();
+      setStudents([]);
+    }
+
+    appendAuditLog(
+      'season_state_change',
+      '👩‍💼 المشرفة العامة',
+      `🏛️ أرشفة الموسم السابق وتفعيل موسم جديد: ${newSeasonTitle.trim()}`,
+      `تم حفظ الموسم السابق في أرشيف المواسم (${archivedCurrentSeason.totalStudents} طالباً، ${archivedCurrentSeason.totalSchools} مدرسة) وبدء الموسم الجديد.`
+    );
+
+    notify(`🚀 تم أرشفة الموسم السابق في (seasonsArchive) وتفعيل «${newSeasonTitle.trim()}» بنجاح!`);
+  };
+
   const notify = (msg: string) => {
     setToastMsg(msg);
     soundEngine.playSelectTile();
@@ -227,7 +343,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const rows = students
       .map(
         (s) =>
-          `"${s.name}",${s.grade},"${s.className}","${s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}","${s.region || settings.defaultRegion || 'القاهرة'}","${s.country || settings.defaultCountry || 'مصر'}",${s.participationCode},${s.scores.total},${s.scores.speedScore},${
+          `"${s.name}",${s.grade},"${s.className}","${s.schoolName || settings.defaultSchoolName || 'المدرسة المسجلة'}","${s.region || settings.defaultRegion || 'القاهرة'}","${s.country || settings.defaultCountry || 'مصر'}",${s.participationCode},${s.scores.total},${s.scores.speedScore},${
             s.qualifiedForFinals ? 'نعم' : 'لا'
           }`
       )
@@ -236,9 +352,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'oyoun_misr_geniuses_results.csv';
+    a.download = 'demagh_alya_results.csv';
     a.click();
-    notify('تم تصدير ملف نتائج طلاب مدرسة عيون مصر بصيغة CSV');
+    notify('تم تصدير ملف نتائج طلاب مسابقة دماغ عالية بصيغة CSV');
   };
 
   const filteredStudents = students.filter(
@@ -249,41 +365,74 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   );
 
   // ==================== 📊 SELF-MANAGED SEASON ANALYTICS & RECHARTS DATA ====================
+  const [chartStageFilter, setChartStageFilter] = useState<'ALL' | EducationalStage>('ALL');
+  const [chartMetricMode, setChartMetricMode] = useState<'counts' | 'averages'>('counts');
+  const [showAll12Grades, setShowAll12Grades] = useState<boolean>(true);
+
   const currentSeasonStatus: SeasonLifecycleStatus =
     settings.seasonStatus || 'qualifiers_running';
   const statusMeta = SEASON_STATUS_META[currentSeasonStatus];
 
   const uniqueSchoolsCount = new Set(
-    students.map((s) => s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات')
+    students.map((s) => (s.schoolName || '').trim()).filter(Boolean)
   ).size;
   const uniqueGovernoratesCount = new Set(
-    students.map((s) => s.governorate || s.region || settings.defaultRegion || 'القاهرة')
+    students.map((s) => (s.governorate || s.region || '').trim()).filter(Boolean)
   ).size;
   const completedQualifiersCount = students.filter((s) => s.completedQualifier).length;
   const qualifiedStudentsCount = students.filter((s) => s.qualifiedForFinals).length;
   const pendingSpecialCasesCount = specialCases.filter((c) => c.status === 'pending').length;
 
+  const chartFilteredStudents = React.useMemo(() => {
+    if (chartStageFilter === 'ALL') return students;
+    return students.filter(
+      (s) => (s.stage || resolveStageFromGrade(s.grade)) === chartStageFilter
+    );
+  }, [students, chartStageFilter]);
+
   // 1. Recharts Data: Distribution of Participating Students by Governorate (توزيع الطلاب حسب المحافظات)
   const governorateChartData = React.useMemo(() => {
     const govMap = new Map<
       string,
-      { governorate: string; total: number; qualified: number; completed: number }
+      {
+        governorate: string;
+        total: number;
+        qualified: number;
+        completed: number;
+        sumScores: number;
+        schoolsSet: Set<string>;
+      }
     >();
-    students.forEach((s) => {
+    chartFilteredStudents.forEach((s) => {
       const gov = s.governorate || s.region || 'القاهرة';
       const entry = govMap.get(gov) || {
         governorate: gov,
         total: 0,
         qualified: 0,
         completed: 0,
+        sumScores: 0,
+        schoolsSet: new Set<string>(),
       };
       entry.total += 1;
+      entry.sumScores += s.scores.total;
+      entry.schoolsSet.add(s.schoolName || 'مدرسة');
       if (s.completedQualifier) entry.completed += 1;
       if (s.qualifiedForFinals) entry.qualified += 1;
       govMap.set(gov, entry);
     });
-    return Array.from(govMap.values()).sort((a, b) => b.total - a.total);
-  }, [students]);
+    return Array.from(govMap.values())
+      .map((item) => ({
+        governorate: item.governorate,
+        total: item.total,
+        qualified: item.qualified,
+        completed: item.completed,
+        schoolsCount: item.schoolsSet.size,
+        avgScore: item.total > 0 ? Math.round(item.sumScores / item.total) : 0,
+        qualificationRate:
+          item.total > 0 ? Math.round((item.qualified / item.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [chartFilteredStudents]);
 
   // 2. Recharts Data: Distribution of Participating Students by Grade & Stage (توزيع الطلاب حسب الصفوف والمراحل)
   const gradeChartData = React.useMemo(() => {
@@ -305,12 +454,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return gradeOrder
       .map((g) => {
-        const inGrade = students.filter((s) => s.grade === g);
+        const inGrade = chartFilteredStudents.filter((s) => s.grade === g);
         const qualifiedInGrade = inGrade.filter((s) => s.qualifiedForFinals).length;
         const avgPoints =
           inGrade.length > 0
             ? Math.round(inGrade.reduce((acc, s) => acc + s.scores.total, 0) / inGrade.length)
             : 0;
+        const qualificationRate =
+          inGrade.length > 0 ? Math.round((qualifiedInGrade / inGrade.length) * 100) : 0;
         return {
           gradeKey: g,
           gradeName: gradeShortNames[g],
@@ -318,10 +469,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           participants: inGrade.length,
           qualified: qualifiedInGrade,
           avgPoints,
+          qualificationRate,
         };
       })
-      .filter((row) => row.participants > 0 || ['3', '4', '5', '6', '8', '11'].includes(row.gradeKey));
-  }, [students]);
+      .filter(
+        (row) =>
+          showAll12Grades ||
+          row.participants > 0 ||
+          ['3', '4', '5', '6', '8', '11'].includes(row.gradeKey)
+      );
+  }, [chartFilteredStudents, showAll12Grades]);
 
   const PIE_COLORS = ['#F59E0B', '#38BDF8', '#10B981', '#A855F7', '#EC4899', '#F97316'];
 
@@ -330,8 +487,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     [students]
   );
 
+  const questionBankReadiness = React.useMemo(
+    () =>
+      evaluateSeasonOneQuestionBankReadiness(
+        [...customQuestions, ...ALL_STAGE_QUALIFIER_QUESTIONS],
+        settings
+      ),
+    [customQuestions, settings]
+  );
+
   // ==================== 🚀 1-CLICK SELF-MANAGED SEASON ACTIONS ====================
   const handleOpenQualifiers = () => {
+    if (!questionBankReadiness.isReady) {
+      soundEngine.playWrong();
+      const shortageDetails = questionBankReadiness.missingDomains
+        .map(
+          (d) =>
+            `${DOMAIN_META[d.domain].label} (متاح ${d.available}/${d.required} — نقص ${d.shortage})`
+        )
+        .join(' ، ');
+      notify(
+        `🔒 لا يمكن بدء المرحلة الأولى (التأهيل) لأن بنك الأسئلة NOT READY (${questionBankReadiness.fulfilledCount}/${questionBankReadiness.totalRequired}). النقص الحالي: ${shortageDetails}`
+      );
+      return;
+    }
     soundEngine.playFanfare();
     setSettings((prev) => ({
       ...prev,
@@ -427,7 +606,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {statusMeta.badge}
               </span>
               <span className="text-xs text-slate-400 font-semibold">
-                {settings.seasonName || 'موسم عباقرة عيون مصر ٢٠٢٦'}
+                {settings.seasonName || 'الموسم الأول — دماغ عالية'}
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-white font-display mt-1">
@@ -443,7 +622,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               onClick={onTriggerGeniusAlarm}
               className="px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-bold hover:bg-rose-500 cursor-pointer"
             >
-              🚨 إنذار العباقرة
+              🚨 إنذار دماغ عالية
             </button>
             <button
               onClick={handleExportCSV}
@@ -455,7 +634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
         </div>
 
-        {/* 4 One-Click Season Lifecycle Buttons (#47) */}
+        {/* 4 One-Click Season Lifecycle Buttons (#47: أزرار سريعة مثل 'بدء التصفيات' و'اعتماد النتائج النهائية') */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2.5">
             <button
@@ -468,7 +647,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <Play className="w-4 h-4" />
-              <span>🚀 فتح التصفيات</span>
+              <span>🚀 بدء التصفيات</span>
             </button>
 
             <button
@@ -481,7 +660,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <Pause className="w-4 h-4" />
-              <span>⏸️ إيقاف التصفيات</span>
+              <span>⏸️ إيقاف التصفيات مؤقتاً</span>
             </button>
 
             <button
@@ -494,7 +673,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <Lock className="w-4 h-4" />
-              <span>🔒 إغلاق التصفيات (تجهيز تلقائي)</span>
+              <span>🔒 إغلاق التصفيات (فرز تلقائي)</span>
             </button>
 
             <button
@@ -507,7 +686,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               }`}
             >
               <Trophy className="w-4 h-4" />
-              <span>🏆 اعتماد النتائج وترقية المتأهلين</span>
+              <span>🏆 اعتماد النتائج النهائية</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.playFanfare();
+                const allPhases =
+                  settings.annualPhases && settings.annualPhases.length > 0
+                    ? settings.annualPhases
+                    : DEFAULT_ANNUAL_PHASES;
+                const currIdx = allPhases.findIndex(
+                  (p) => p.id === (settings.activeAnnualPhaseId || 'phase_2_administration')
+                );
+                const nextPhase = allPhases[(currIdx + 1) % allPhases.length];
+                const updatedPhases = allPhases.map((item) => ({
+                  ...item,
+                  status: (item.order < nextPhase.order
+                    ? 'completed'
+                    : item.order === nextPhase.order
+                    ? 'active'
+                    : 'upcoming') as 'completed' | 'active' | 'upcoming',
+                }));
+                setSettings((prev) => ({
+                  ...prev,
+                  seasonStatus: 'qualifiers_running',
+                  activeAnnualPhaseId: nextPhase.id as AnnualPhaseId,
+                  currentHierarchyLevel: nextPhase.targetLevel,
+                  questionsCountPerExam: nextPhase.questionsCount,
+                  qualifierDurationMinutes: nextPhase.durationMinutes,
+                  annualPhases: updatedPhases,
+                }));
+                appendAuditLog(
+                  'season_state_change',
+                  '👩‍💼 المشرفة العامة',
+                  `🔄 الانتقال للمرحلة السنوية التالية: ${nextPhase.title}`,
+                  `تم تصعيد المتأهلين وفتح (${nextPhase.shortTitle} — ${nextPhase.monthsLabel}) تلقائياً.`
+                );
+                notify(`🔄 تم تصعيد المتأهلين وبدء «${nextPhase.title}»!`);
+              }}
+              className="px-4 py-2.5 rounded-xl bg-slate-900 border border-emerald-400/50 text-emerald-300 hover:bg-emerald-400 hover:text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>تصعيد للمرحلة السنوية التالية</span>
             </button>
           </div>
 
@@ -701,75 +923,120 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="p-6 rounded-3xl bg-[#131F38] border border-amber-400/40 space-y-6 shadow-xl">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
-                <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                   <BarChart3 className="w-4 h-4" />
-                  <span>الإحصائيات المرئية الحية (Recharts Analytics)</span>
+                  <span>☁️ الإحصائيات السحابية الحية المباشرة (Firestore Real-Time + Recharts)</span>
                 </span>
                 <h3 className="text-xl font-bold text-white font-display mt-0.5">
-                  📊 توزيع الطلاب المشاركين والمتأهلين حسب المحافظات والصفوف الدراسية
+                  📊 توزيع الطلاب الحقيقيين المشاركين والمتأهلين حسب المحافظات والصفوف الدراسية
                 </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  أي طالب يسجل أو يمتحن الآن من هاتفه يظهر هنا فوراً في نفس اللحظة بدون أي بيانات وهمية.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  // Add a sample batch of multi-governorate & multi-grade students to see live auto-scaling
-                  soundEngine.playSelectTile();
-                  const demoGovs = ['القاهرة', 'الجيزة', 'الإسكندرية', 'الدقهلية', 'الشرقية', 'أسيوط'];
-                  const demoGrades: GradeNumber[] = ['2', '3', '4', '5', '6', '8', '9', '11'];
-                  const pickedGov = demoGovs[Math.floor(Math.random() * demoGovs.length)];
-                  const pickedGrade = demoGrades[Math.floor(Math.random() * demoGrades.length)];
-                  const stage = resolveStageFromGrade(pickedGrade);
-                  const newStu: StudentProfile = {
-                    id: `stu-auto-${Date.now()}`,
-                    name: `طالب متسابق (${pickedGov})`,
-                    grade: pickedGrade,
-                    stage,
-                    className: `${pickedGrade} / أ`,
-                    schoolName: `مدرسة عيون مصر (${pickedGov})`,
-                    administration: `إدارة ${pickedGov} التعليمية`,
-                    governorate: pickedGov,
-                    region: pickedGov,
-                    country: 'مصر 🇪🇬',
-                    participationCode: `OM-${pickedGrade}${Math.floor(100 + Math.random() * 899)}`,
-                    attemptsUsed: 1,
-                    completedQualifier: true,
-                    qualifierDurationSeconds: 1050,
-                    scores: {
-                      total: Math.floor(380 + Math.random() * 100),
-                      speedScore: 92,
-                      logic: 90,
-                      science: 91,
-                      arabic: 89,
-                      observation: 93,
-                      math: 92,
-                      egypt_world: 90,
-                      general_culture: 88,
-                      technology: 94,
-                    },
-                    qualifiedForFinals: true,
-                    badges: ['🌟 متأهل تلقائياً'],
-                  };
-                  const { rankedStudents } = runAutomatedRankingAndQualification(
-                    [newStu, ...students],
-                    settings
-                  );
-                  setStudents(rankedStudents);
-                  appendAuditLog(
-                    'student_register',
-                    '🤖 النظام الذاتي',
-                    `تسجيل وتصحيح آلي لطالب جديد من محافظة ${pickedGov}`,
-                    `تم تسكين الطالب في (${STAGE_METADATA[stage].shortLabel} - صف ${pickedGrade}) وتحديث رسوم Recharts تلقائياً.`
-                  );
-                  notify(`تمت محاكاة تسجيل وتصحيح طالب جديد من محافظة ${pickedGov} (صف ${pickedGrade})!`);
-                }}
-                className="px-4 py-2 rounded-xl bg-amber-400/20 border border-amber-400 text-amber-300 hover:bg-amber-400 hover:text-slate-950 text-xs font-bold transition-colors cursor-pointer"
-              >
-                + محاكاة دخول طالب جديد وتحديث الرسم البياني تلقائياً
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSection('students')}
+                  className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400 text-emerald-300 hover:bg-emerald-400 hover:text-slate-950 text-xs font-extrabold transition-colors cursor-pointer"
+                >
+                  👨‍🎓 عرض قائمة الطلاب الحقيقيين المسجلين ({students.length})
+                </button>
+                {students.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await clearAllStudentsFromCloud();
+                      setStudents([]);
+                      notify('🧹 تم مسح جميع الطلاب وتصفير قاعدة البيانات السحابية بنجاح!');
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-rose-500/20 border border-rose-400/50 text-rose-300 hover:bg-rose-500 hover:text-white text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    🗑️ تصفير قائمة الطلاب بالكامل
+                  </button>
+                )}
+              </div>
             </div>
 
+            {/* Interactive Recharts Filter & Metric Mode Toolbar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 text-xs">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-slate-400 font-bold ml-1">🎓 فلترة الرسوم حسب المرحلة:</span>
+                {(
+                  [
+                    { id: 'ALL', label: 'كل المراحل (٤)' },
+                    { id: 'primary_lower', label: '🟢 ابتدائي صغير' },
+                    { id: 'primary_upper', label: '🔵 ابتدائي كبير' },
+                    { id: 'preparatory', label: '🟣 إعدادي' },
+                    { id: 'secondary', label: '🟠 ثانوي' },
+                  ] as const
+                ).map((stTab) => (
+                  <button
+                    key={stTab.id}
+                    type="button"
+                    onClick={() => setChartStageFilter(stTab.id)}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                      chartStageFilter === stTab.id
+                        ? 'bg-amber-400 text-slate-950 shadow'
+                        : 'bg-slate-900 text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {stTab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setChartMetricMode('counts')}
+                    className={`px-3 py-1 rounded-lg font-bold cursor-pointer ${
+                      chartMetricMode === 'counts'
+                        ? 'bg-sky-400 text-slate-950'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    📊 أعداد المشاركين والمتأهلين
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartMetricMode('averages')}
+                    className={`px-3 py-1 rounded-lg font-bold cursor-pointer ${
+                      chartMetricMode === 'averages'
+                        ? 'bg-emerald-400 text-slate-950'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    📈 متوسط النقاط ونسبة التأهل %
+                  </button>
+                </div>
+
+                <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={showAll12Grades}
+                    onChange={(e) => setShowAll12Grades(e.target.checked)}
+                    className="accent-amber-400"
+                  />
+                  <span>عرض جميع الصفوف الـ12</span>
+                </label>
+              </div>
+            </div>
+
+            {students.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-950/85 border border-dashed border-slate-700 text-center space-y-2">
+                <div className="text-3xl">📊</div>
+                <h4 className="text-base font-bold text-white font-display">
+                  لا توجد بيانات حقيقية متاحة حاليًا.
+                </h4>
+                <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                  سيتم عرض النتائج والرسوم البيانية هنا عند تسجيل البيانات الفعلية للطلاب في قاعدة البيانات السحابية. جميع المؤشرات تبدأ من الصفر الحقيقي (0).
+                </p>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Chart 1: BarChart of Students & Qualified by Governorate (توزيع الطلاب حسب المحافظات) */}
+              {/* Chart 1: BarChart / ComposedChart of Students & Qualified by Governorate (توزيع الطلاب حسب المحافظات) */}
               <div className="lg:col-span-6 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -777,57 +1044,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ١. توزيع الطلاب المشاركين والمتأهلين حسب المحافظات 🗺️
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      مقارنة إجمالي المسجلين بعدد المتأهلين تلقائياً في كل محافظة
+                      {chartMetricMode === 'counts'
+                        ? 'مقارنة إجمالي المسجلين بعدد المتأهلين تلقائياً في كل محافظة'
+                        : 'مقارنة متوسط الدرجات ونسبة التأهل المئوية (%) في كل محافظة'}
                     </p>
                   </div>
+                  <span className="text-[11px] font-mono-num text-sky-400 font-bold">
+                    {governorateChartData.length} محافظات نشطة
+                  </span>
                 </div>
 
                 <div className="h-72 w-full" dir="ltr">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={governorateChartData}
-                      margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                      <XAxis
-                        dataKey="governorate"
-                        stroke="#94A3B8"
-                        tick={{ fill: '#E2E8F0', fontSize: 12 }}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        stroke="#94A3B8"
-                        tick={{ fill: '#94A3B8', fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#0F172A',
-                          borderColor: '#D4AF37',
-                          borderRadius: '12px',
-                          color: '#F8FAFC',
-                          fontSize: '12px',
-                          textAlign: 'right',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
-                      <Bar
-                        dataKey="total"
-                        name="إجمالي المشاركين بالمحافظة"
-                        fill="#38BDF8"
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="qualified"
-                        name="المتأهلون تلقائياً"
-                        fill="#10B981"
-                        radius={[6, 6, 0, 0]}
-                      />
-                    </BarChart>
+                    {chartMetricMode === 'counts' ? (
+                      <BarChart
+                        data={governorateChartData}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                        <XAxis
+                          dataKey="governorate"
+                          stroke="#94A3B8"
+                          tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          stroke="#94A3B8"
+                          tick={{ fill: '#94A3B8', fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0F172A',
+                            borderColor: '#D4AF37',
+                            borderRadius: '12px',
+                            color: '#F8FAFC',
+                            fontSize: '12px',
+                            textAlign: 'right',
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                        <Bar
+                          dataKey="total"
+                          name="إجمالي المشاركين بالمحافظة"
+                          fill="#38BDF8"
+                          radius={[6, 6, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="qualified"
+                          name="المتأهلون تلقائياً"
+                          fill="#10B981"
+                          radius={[6, 6, 0, 0]}
+                        />
+                      </BarChart>
+                    ) : (
+                      <ComposedChart
+                        data={governorateChartData}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                        <XAxis
+                          dataKey="governorate"
+                          stroke="#94A3B8"
+                          tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                        />
+                        <YAxis
+                          stroke="#94A3B8"
+                          tick={{ fill: '#94A3B8', fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0F172A',
+                            borderColor: '#D4AF37',
+                            borderRadius: '12px',
+                            color: '#F8FAFC',
+                            fontSize: '12px',
+                            textAlign: 'right',
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                        <Bar
+                          dataKey="avgScore"
+                          name="متوسط النقاط بالمحافظة"
+                          fill="#F59E0B"
+                          radius={[6, 6, 0, 0]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="qualificationRate"
+                          name="نسبة التأهل (%)"
+                          stroke="#10B981"
+                          strokeWidth={3}
+                        />
+                      </ComposedChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Chart 2: BarChart of Students Distribution by Grade (توزيع الطلاب حسب الصفوف الدراسية) */}
+              {/* Chart 2: BarChart / ComposedChart of Students Distribution by Grade (توزيع الطلاب حسب الصفوف الدراسية) */}
               <div className="lg:col-span-6 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -835,56 +1149,104 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       ٢. توزيع الطلاب المشاركين حسب الصفوف الدراسية 🎓
                     </h4>
                     <p className="text-[11px] text-slate-400">
-                      يوضح أعداد الطلاب والمتأهلين عبر الصفوف (ابتدائي صغير، كبير، إعدادي، ثانوي)
+                      {chartMetricMode === 'counts'
+                        ? 'يوضح أعداد الطلاب والمتأهلين عبر الصفوف (ابتدائي صغير، كبير، إعدادي، ثانوي)'
+                        : 'يوضح متوسط النقاط ونسبة التأهل (%) لكل صف دراسي'}
                     </p>
                   </div>
+                  <span className="text-[11px] font-mono-num text-amber-400 font-bold">
+                    {gradeChartData.length} صفاً دراسياً
+                  </span>
                 </div>
 
                 <div className="h-72 w-full" dir="ltr">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={gradeChartData}
-                      margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
-                      <XAxis
-                        dataKey="gradeName"
-                        stroke="#94A3B8"
-                        tick={{ fill: '#E2E8F0', fontSize: 12 }}
-                      />
-                      <YAxis
-                        allowDecimals={false}
-                        stroke="#94A3B8"
-                        tick={{ fill: '#94A3B8', fontSize: 11 }}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: '#0F172A',
-                          borderColor: '#D4AF37',
-                          borderRadius: '12px',
-                          color: '#F8FAFC',
-                          fontSize: '12px',
-                          textAlign: 'right',
-                        }}
-                      />
-                      <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
-                      <Bar
-                        dataKey="participants"
-                        name="عدد الطلاب بالصف"
-                        fill="#F59E0B"
-                        radius={[6, 6, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="qualified"
-                        name="المتأهلون بالصف"
-                        fill="#A855F7"
-                        radius={[6, 6, 0, 0]}
-                      />
-                    </BarChart>
+                    {chartMetricMode === 'counts' ? (
+                      <BarChart
+                        data={gradeChartData}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                        <XAxis
+                          dataKey="gradeName"
+                          stroke="#94A3B8"
+                          tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                        />
+                        <YAxis
+                          allowDecimals={false}
+                          stroke="#94A3B8"
+                          tick={{ fill: '#94A3B8', fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0F172A',
+                            borderColor: '#D4AF37',
+                            borderRadius: '12px',
+                            color: '#F8FAFC',
+                            fontSize: '12px',
+                            textAlign: 'right',
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                        <Bar
+                          dataKey="participants"
+                          name="عدد الطلاب بالصف"
+                          fill="#F59E0B"
+                          radius={[6, 6, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="qualified"
+                          name="المتأهلون بالصف"
+                          fill="#A855F7"
+                          radius={[6, 6, 0, 0]}
+                        />
+                      </BarChart>
+                    ) : (
+                      <ComposedChart
+                        data={gradeChartData}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                        <XAxis
+                          dataKey="gradeName"
+                          stroke="#94A3B8"
+                          tick={{ fill: '#E2E8F0', fontSize: 12 }}
+                        />
+                        <YAxis
+                          stroke="#94A3B8"
+                          tick={{ fill: '#94A3B8', fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: '#0F172A',
+                            borderColor: '#D4AF37',
+                            borderRadius: '12px',
+                            color: '#F8FAFC',
+                            fontSize: '12px',
+                            textAlign: 'right',
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+                        <Bar
+                          dataKey="avgPoints"
+                          name="متوسط النقاط بالصف"
+                          fill="#A855F7"
+                          radius={[6, 6, 0, 0]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="qualificationRate"
+                          name="نسبة التأهل (%)"
+                          stroke="#38BDF8"
+                          strokeWidth={3}
+                        />
+                      </ComposedChart>
+                    )}
                   </ResponsiveContainer>
                 </div>
               </div>
             </div>
+            )}
 
             {/* Chart 3: PieChart of Governorate Share + Stage Quotas Progress */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-2">
@@ -994,7 +1356,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="space-y-3">
-            {specialCases.map((sc) => (
+            {specialCases.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-400">
+                لا توجد حالات استثنائية مسجلة حاليًا.
+              </div>
+            ) : specialCases.map((sc) => (
               <div
                 key={sc.id}
                 className={`p-4 rounded-2xl border flex flex-col lg:flex-row lg:items-center justify-between gap-4 ${
@@ -1139,7 +1505,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           <div className="space-y-2.5 max-h-[500px] overflow-y-auto">
-            {auditLogs.map((log) => (
+            {auditLogs.length === 0 ? (
+              <div className="p-8 rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-400">
+                لا توجد بيانات حقيقية متاحة حاليًا في سجل العمليات. سيتم توثيق العمليات هنا تلقائياً عند حدوثها.
+              </div>
+            ) : auditLogs.map((log) => (
               <div
                 key={log.id}
                 className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
@@ -1186,9 +1556,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onChange={(e) => setStuGrade(e.target.value as GradeNumber)}
                 className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
               >
-                <option value="4">الصف الرابع</option>
-                <option value="5">الصف الخامس</option>
-                <option value="6">الصف السادس</option>
+                <option value="1">الصف الأول الابتدائي</option>
+                <option value="2">الصف الثاني الابتدائي</option>
+                <option value="3">الصف الثالث الابتدائي</option>
+                <option value="4">الصف الرابع الابتدائي</option>
+                <option value="5">الصف الخامس الابتدائي</option>
+                <option value="6">الصف السادس الابتدائي</option>
+                <option value="7">الصف الأول الإعدادي</option>
+                <option value="8">الصف الثاني الإعدادي</option>
+                <option value="9">الصف الثالث الإعدادي</option>
+                <option value="10">الصف الأول الثانوي</option>
+                <option value="11">الصف الثاني الثانوي</option>
+                <option value="12">الصف الثالث الثانوي</option>
               </select>
               <input
                 type="text"
@@ -1206,7 +1585,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   value={stuSchool}
                   onChange={(e) => setStuSchool(e.target.value)}
-                  placeholder="اسم المدرسة (مثال: مدرسة عيون مصر للغات)"
+                  placeholder="اسم المدرسة..."
                   className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
                 />
               </div>
@@ -1243,7 +1622,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   name: stuName.trim(),
                   grade: stuGrade,
                   className: stuClass,
-                  schoolName: stuSchool.trim() || 'مدرسة عيون مصر للغات',
+                  schoolName: stuSchool.trim() || 'المدرسة المسجلة',
                   region: stuRegion.trim() || 'القاهرة',
                   country: stuCountry.trim() || 'مصر 🇪🇬',
                   participationCode: code,
@@ -1301,14 +1680,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
-                  {filteredStudents.map((s) => (
+                  {filteredStudents.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        لا توجد بيانات حقيقية متاحة حاليًا. سيتم عرض الطلاب هنا فور تسجيلهم الفعلي.
+                      </td>
+                    </tr>
+                  ) : filteredStudents.map((s) => (
                     <tr key={s.id}>
                       <td className="py-3 px-3 font-bold text-white">{s.name}</td>
                       <td className="py-3 px-3 text-slate-300">
                         الصف {s.grade} ({s.className})
                       </td>
                       <td className="py-3 px-3 text-emerald-300">
-                        {s.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · {s.region || settings.defaultRegion || 'القاهرة'} · {s.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                        {s.schoolName || settings.defaultSchoolName || 'المدرسة المسجلة'} · {s.region || settings.defaultRegion || 'القاهرة'} · {s.country || settings.defaultCountry || 'مصر 🇪🇬'}
                       </td>
                       <td className="py-3 px-3 font-mono-num text-amber-400 font-bold">
                         {s.participationCode}
@@ -1338,10 +1723,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
                       <td className="py-3 px-3">
                         <button
-                          onClick={() =>
-                            setStudents((prev) => prev.filter((item) => item.id !== s.id))
-                          }
-                          className="text-rose-400 hover:text-rose-300"
+                          onClick={async () => {
+                            await deleteStudentFromCloud(s.id);
+                            setStudents((prev) => prev.filter((item) => item.id !== s.id));
+                            notify(`تم حذف الطالب ${s.name} من السحابة.`);
+                          }}
+                          className="text-rose-400 hover:text-rose-300 cursor-pointer font-bold"
                         >
                           حذف
                         </button>
@@ -1355,177 +1742,786 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
       )}
 
-      {/* 2. QUESTIONS SECTION */}
+      {/* 2. QUESTIONS SECTION (OFFICIAL QUESTION BANK MANAGEMENT — SINGLE SOURCE OF TRUTH) */}
       {section === 'questions' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-5 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
-            <h3 className="text-base font-bold text-white font-display">إضافة سؤال جديد</h3>
-            <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-6">
+          {/* Season 1 Blueprint Readiness & Domain Shortage Panel for Supervisor */}
+          <div className="p-6 rounded-3xl bg-[#131F38] border-2 border-amber-400/60 space-y-5 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">المجال</label>
-                <select
-                  value={qDomain}
-                  onChange={(e) => setQDomain(e.target.value as QualifierDomain)}
-                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                <div className="text-[11px] font-mono text-amber-400 font-bold">
+                  QUESTION BANK SOURCE: platform/custom_questions · SEASON 1 BLUEPRINT (30 QUESTIONS / 7 DOMAINS)
+                </div>
+                <h3 className="text-lg sm:text-xl font-extrabold text-white font-display mt-0.5">
+                  📊 لوحة جاهزية بنك الأسئلة الرسمي للمرحلة الأولى: التأهيل (دماغ عالية)
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  لا تفتح المرحلة الأولى (التأهيل) إلا عند اكتمال 30 سؤالًا حقيقيًا، معتمدًا (`approved`)، ومنشورًا (`published: true`) موزعة على المجالات الـ7 الرسمية بدون أي تكرار.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-extrabold border ${
+                    questionBankReadiness.isReady
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-400 text-rose-300'
+                  }`}
                 >
-                  {(Object.keys(DOMAIN_META) as QualifierDomain[]).map((k) => (
-                    <option key={k} value={k}>
-                      {DOMAIN_META[k].label}
+                  {questionBankReadiness.isReady
+                    ? `🟢 Stage 1 Status: READY (${questionBankReadiness.fulfilledCount}/${questionBankReadiness.totalRequired})`
+                    : `🔒 Stage 1 Status: NOT READY (${questionBankReadiness.fulfilledCount}/${questionBankReadiness.totalRequired} — ينقص ${questionBankReadiness.missingTotal})`}
+                </span>
+              </div>
+            </div>
+
+            {/* Summary KPI Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800">
+                <div className="text-slate-400">إجمالي الأسئلة بالبنك</div>
+                <div className="text-xl font-extrabold font-mono-num text-white mt-0.5">
+                  {questionBankReadiness.totalInBank}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-emerald-500/40">
+                <div className="text-emerald-300">معتمدة ومنشورة للتأهيل</div>
+                <div className="text-xl font-extrabold font-mono-num text-emerald-400 mt-0.5">
+                  {questionBankReadiness.totalAvailable}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/40">
+                <div className="text-amber-300">المكتمل في الـBlueprint</div>
+                <div className="text-xl font-extrabold font-mono-num text-amber-400 mt-0.5">
+                  {questionBankReadiness.fulfilledCount} / {questionBankReadiness.totalRequired}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-sky-500/40">
+                <div className="text-sky-300">مسودات قيد المراجعة</div>
+                <div className="text-xl font-extrabold font-mono-num text-sky-400 mt-0.5">
+                  {questionBankReadiness.draftCount}
+                </div>
+              </div>
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-rose-500/40">
+                <div className="text-rose-300">إجمالي النقص المطلوب</div>
+                <div className="text-xl font-extrabold font-mono-num text-rose-400 mt-0.5">
+                  {questionBankReadiness.missingTotal}
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Domain Blueprint Table */}
+            <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/90">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-900/90 text-slate-300 border-b border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3">المجال الرسمي (Domain)</th>
+                    <th className="py-2.5 px-3">المطلوب (Required)</th>
+                    <th className="py-2.5 px-3">المعتمد والمنشور (Approved)</th>
+                    <th className="py-2.5 px-3">إجمالي المجال بالبنك</th>
+                    <th className="py-2.5 px-3">النقص (Shortage)</th>
+                    <th className="py-2.5 px-3">حالة المجال</th>
+                    <th className="py-2.5 px-3">إجراء سريع</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/70">
+                  {questionBankReadiness.domainStatus.map((st) => (
+                    <tr key={st.domain} className="hover:bg-slate-900/50">
+                      <td className="py-2.5 px-3 font-bold text-white">
+                        <span style={{ color: DOMAIN_META[st.domain].color }}>●</span>{' '}
+                        {DOMAIN_META[st.domain].label}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono-num font-bold text-amber-300">
+                        {st.required}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono-num font-bold text-emerald-300">
+                        {st.available}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono-num text-slate-400">
+                        {st.totalDomainInBank}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono-num font-bold">
+                        {st.shortage > 0 ? (
+                          <span className="text-rose-400">ينقص {st.shortage}</span>
+                        ) : (
+                          <span className="text-emerald-400">0</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {st.isComplete ? (
+                          <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[11px] font-bold">
+                            ✓ مكتمل ({st.available}/{st.required})
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/50 text-rose-300 text-[11px] font-bold">
+                            ⚠️ غير مكتمل ({st.available}/{st.required})
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQDomain(st.domain);
+                            setQFilterDomain(st.domain);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 hover:border-amber-400 text-amber-300 text-[11px] font-bold cursor-pointer"
+                        >
+                          + إضافة / فلترة {DOMAIN_META[st.domain].label}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {!questionBankReadiness.isReady && questionBankReadiness.missingDomains.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-400/50 text-rose-200 text-xs">
+                ⚠️ <strong>النقص المطلوب استكماله لفتح المرحلة الأولى (التأهيل):</strong>{' '}
+                {questionBankReadiness.missingDomains
+                  .map(
+                    (d) =>
+                      `${DOMAIN_META[d.domain].label}: متاح ${d.available} من ${d.required} (نقص ${d.shortage})`
+                  )
+                  .join(' · ')}
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LEFT COLUMN: ADD / EDIT OFFICIAL QUESTION FORM (5 COLS) */}
+            <div className="lg:col-span-5 p-6 rounded-3xl bg-[#131F38] border-2 border-slate-800 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <span className="text-[11px] font-bold text-amber-400">
+                    {editingQuestionId ? `✏️ تعديل سؤال قائم (${editingQuestionId})` : '➕ إضافة سؤال رسمي جديد'}
+                  </span>
+                  <h3 className="text-base font-extrabold text-white font-display mt-0.5">
+                    {editingQuestionId ? 'تحديث بيانات السؤال في البنك' : 'إدخال سؤال جديد لبنك دماغ عالية'}
+                  </h3>
+                </div>
+                {editingQuestionId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingQuestionId(null);
+                      setQText('');
+                      setQContextPassage('');
+                      setQExplanation('');
+                      setQOpt0('');
+                      setQOpt1('');
+                      setQOpt2('');
+                      setQOpt3('');
+                      setQCorrect(0);
+                      setQValidationErrors([]);
+                    }}
+                    className="px-3 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs text-slate-300 hover:text-white cursor-pointer"
+                  >
+                    إلغاء التعديل ✕
+                  </button>
+                )}
+              </div>
+
+              {qValidationErrors.length > 0 && (
+                <div className="p-3.5 rounded-xl bg-rose-500/20 border border-rose-400 text-rose-200 text-xs space-y-1">
+                  <div className="font-extrabold text-rose-300">⚠️ يرجى تصحيح الأخطاء التالية قبل الحفظ:</div>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {qValidationErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">المجال الرسمي (Domain) *</label>
+                  <select
+                    value={qDomain}
+                    onChange={(e) => setQDomain(e.target.value as QualifierDomain)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold"
+                  >
+                    {(
+                      [
+                        'arabic',
+                        'math',
+                        'science',
+                        'egypt_world',
+                        'english',
+                        'general_culture',
+                        'logic',
+                      ] as QualifierDomain[]
+                    ).map((k) => (
+                      <option key={k} value={k}>
+                        {DOMAIN_META[k].label} (المطلوب: {DOMAIN_META[k].targetCount})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">الصف الدراسي المستهدف *</label>
+                  <select
+                    value={qGrade}
+                    onChange={(e) => setQGrade(e.target.value as GradeNumber | 'all')}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold"
+                  >
+                    <option value="all">جميع صفوف الموسم الأول (٤ + ٥ + ٦ ابتدائي)</option>
+                    <option value="4">الصف الرابع الابتدائي (4)</option>
+                    <option value="5">الصف الخامس الابتدائي (5)</option>
+                    <option value="6">الصف السادس الابتدائي (6)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">المرحلة الرسمية للمسابقة *</label>
+                  <select
+                    value={qPhaseId}
+                    onChange={(e) => setQPhaseId(e.target.value as OfficialPhaseTargetId)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  >
+                    <option value="stage_1_qualifiers">١. المرحلة الأولى: التأهيل</option>
+                    <option value="stage_2_semi_finals">٢. المرحلة الثانية: التصفيات النهائية</option>
+                    <option value="stage_3_finals">٣. المرحلة الثالثة: النهائي</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">مستوى الصعوبة *</label>
+                  <select
+                    value={qDiff}
+                    onChange={(e) => setQDiff(e.target.value as DifficultyLevel)}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  >
+                    <option value="easy">🟢 سهل (easy)</option>
+                    <option value="medium">🟡 متوسط (medium)</option>
+                    <option value="hard">🔴 صعب (hard)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">حالة المراجعة (Status) *</label>
+                  <select
+                    value={qReviewStatus}
+                    onChange={(e) => {
+                      const st = e.target.value as QuestionReviewStatus;
+                      setQReviewStatus(st);
+                      if (st !== 'approved') setQPublished(false);
+                      else setQPublished(true);
+                    }}
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold"
+                  >
+                    <option value="approved">🟢 معتمد (approved)</option>
+                    <option value="draft">🟡 مسودة (draft — لا يظهر في الاختبار)</option>
+                    <option value="archived">📦 مؤرشف (archived — موقوف)</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col justify-end">
+                  <label className="p-2.5 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-between cursor-pointer">
+                    <span className="font-bold text-emerald-300">نشر للاختبار (`published`)</span>
+                    <input
+                      type="checkbox"
+                      checked={qPublished && qReviewStatus === 'approved'}
+                      disabled={qReviewStatus !== 'approved'}
+                      onChange={(e) => setQPublished(e.target.checked)}
+                      className="accent-emerald-400 w-4 h-4"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">نص السؤال (`question`) *</label>
+                  <textarea
+                    rows={3}
+                    value={qText}
+                    onChange={(e) => setQText(e.target.value)}
+                    placeholder="اكتب نص السؤال بوضوح ودقة..."
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">
+                    فقرة سياقية أو تمهيد للسؤال (`contextPassage` — اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    value={qContextPassage}
+                    onChange={(e) => setQContextPassage(e.target.value)}
+                    placeholder="اختياري: نص معلومة أو قطعة قراءة قصيرة تسبق السؤال..."
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                  />
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <label className="block text-amber-300 font-bold">
+                    الاختيارات الأربعة (`options` — جميعها مطلوبة ومختلفة) *:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      { idx: 0, val: qOpt0, setVal: setQOpt0, label: 'الاختيار الأول (1)' },
+                      { idx: 1, val: qOpt1, setVal: setQOpt1, label: 'الاختيار الثاني (2)' },
+                      { idx: 2, val: qOpt2, setVal: setQOpt2, label: 'الاختيار الثالث (3)' },
+                      { idx: 3, val: qOpt3, setVal: setQOpt3, label: 'الاختيار الرابع (4)' },
+                    ].map((optItem) => (
+                      <div
+                        key={optItem.idx}
+                        className={`p-2 rounded-xl border ${
+                          qCorrect === optItem.idx
+                            ? 'bg-emerald-500/10 border-emerald-400'
+                            : 'bg-slate-950 border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-bold text-slate-300">{optItem.label}</span>
+                          <label className="flex items-center gap-1 text-[10px] text-emerald-300 cursor-pointer font-bold">
+                            <input
+                              type="radio"
+                              name="correctOptionRadio"
+                              checked={qCorrect === optItem.idx}
+                              onChange={() => setQCorrect(optItem.idx)}
+                              className="accent-emerald-400"
+                            />
+                            <span>إجابة صحيحة</span>
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          value={optItem.val}
+                          onChange={(e) => optItem.setVal(e.target.value)}
+                          placeholder={`اكتب ${optItem.label}...`}
+                          className="w-full px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">
+                    الشرح التعليمي للإجابة الصحيحة (`explanation` — اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    value={qExplanation}
+                    onChange={(e) => setQExplanation(e.target.value)}
+                    placeholder="اختياري: توضيح سبب صحة الإجابة للمراجعة..."
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const candidate: Partial<QualifierQuestion> = {
+                      seasonId: 'season_1',
+                      phaseId: qPhaseId,
+                      domain: qDomain,
+                      difficulty: qDiff,
+                      stage: 'primary_upper',
+                      grade: qGrade,
+                      question: qText.trim(),
+                      contextPassage: qContextPassage.trim() || undefined,
+                      explanation: qExplanation.trim() || undefined,
+                      options: [qOpt0.trim(), qOpt1.trim(), qOpt2.trim(), qOpt3.trim()],
+                      correctIndex: qCorrect,
+                      points: qPoints || 1,
+                      timeSeconds: qTime || 60,
+                      reviewStatus: qReviewStatus,
+                      published: qReviewStatus === 'approved' ? qPublished : false,
+                    };
+
+                    const validation = validateOfficialQuestion(
+                      candidate,
+                      customQuestions,
+                      editingQuestionId
+                    );
+                    if (!validation.isValid) {
+                      soundEngine.playWrong();
+                      setQValidationErrors(validation.errors);
+                      return;
+                    }
+
+                    setQValidationErrors([]);
+                    const nowIso = new Date().toISOString();
+
+                    if (editingQuestionId) {
+                      setCustomQuestions((prev) =>
+                        prev.map((item) =>
+                          item.id === editingQuestionId
+                            ? {
+                                ...item,
+                                ...(candidate as QualifierQuestion),
+                                id: editingQuestionId,
+                                version: (typeof item.version === 'number' ? item.version : 1) + 1,
+                                updatedAt: nowIso,
+                              }
+                            : item
+                        )
+                      );
+                      appendAuditLog(
+                        'supervisor_override',
+                        '👩‍💼 المشرفة العامة',
+                        `✏️ تعديل سؤال في بنك الأسئلة (${DOMAIN_META[qDomain].label})`,
+                        `تم تحديث السؤال (${editingQuestionId}) وحفظه في المصدر الأساسي لبنك الأسئلة.`
+                      );
+                      notify('✅ تم حفظ التعديلات على السؤال وتحديث رقم الإصدار (Version) ومفتاح التصحيح المحمي!');
+                    } else {
+                      const newQ: QualifierQuestion = {
+                        ...(candidate as QualifierQuestion),
+                        id: `q-s1-${Date.now()}-${Math.floor(100 + Math.random() * 899)}`,
+                        version: 1,
+                        createdBy: 'supervisor',
+                        createdAt: nowIso,
+                        updatedAt: nowIso,
+                      };
+                      setCustomQuestions((prev) => [newQ, ...prev]);
+                      appendAuditLog(
+                        'supervisor_override',
+                        '👩‍💼 المشرفة العامة',
+                        `➕ إضافة سؤال جديد لبنك الأسئلة (${DOMAIN_META[qDomain].label})`,
+                        `تمت إضافة السؤال بحالة (${newQ.reviewStatus}) في مجال ${DOMAIN_META[qDomain].label}.`
+                      );
+                      notify(`✅ تمت إضافة السؤال بنجاح إلى مجال «${DOMAIN_META[qDomain].label}»!`);
+                    }
+
+                    setEditingQuestionId(null);
+                    setQText('');
+                    setQContextPassage('');
+                    setQExplanation('');
+                    setQOpt0('');
+                    setQOpt1('');
+                    setQOpt2('');
+                    setQOpt3('');
+                    setQCorrect(0);
+                  }}
+                  className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs cursor-pointer shadow-lg transition-all"
+                >
+                  {editingQuestionId ? '💾 حفظ تعديلات السؤال في البنك' : '+ حفظ السؤال في بنك المسابقة الرسمي'}
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: QUESTION BANK LIST, FILTERS & ACTIONS (7 COLS) */}
+            <div className="lg:col-span-7 p-6 rounded-3xl bg-[#131F38] border-2 border-slate-800 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-base font-extrabold text-white font-display">
+                    📚 قائمة أسئلة بنك «دماغ عالية» الرسمي ({customQuestions.length} سؤال)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    المصدر الوحيد للحقيقة: `platform/custom_questions` — الأسئلة المعتمدة والمنشورة فقط تدخل في اختبارات الطلاب.
+                  </p>
+                </div>
+                <input
+                  type="text"
+                  value={qSearchText}
+                  onChange={(e) => setQSearchText(e.target.value)}
+                  placeholder="🔍 بحث في نص السؤال أو الاختيارات..."
+                  className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white w-60"
+                />
+              </div>
+
+              {/* Filter Bar */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                <select
+                  value={qFilterDomain}
+                  onChange={(e) => setQFilterDomain(e.target.value as 'ALL' | QualifierDomain)}
+                  className="px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200"
+                >
+                  <option value="ALL">كل المجالات (7)</option>
+                  {(
+                    [
+                      'arabic',
+                      'math',
+                      'science',
+                      'egypt_world',
+                      'english',
+                      'general_culture',
+                      'logic',
+                    ] as QualifierDomain[]
+                  ).map((d) => (
+                    <option key={d} value={d}>
+                      {DOMAIN_META[d].label}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">الصعوبة</label>
+
                 <select
-                  value={qDiff}
-                  onChange={(e) => setQDiff(e.target.value as DifficultyLevel)}
-                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
+                  value={qFilterGrade}
+                  onChange={(e) => setQFilterGrade(e.target.value as 'ALL' | GradeNumber | 'all')}
+                  className="px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200"
                 >
+                  <option value="ALL">كل الصفوف</option>
+                  <option value="all">مشترك (٤-٦)</option>
+                  <option value="4">الصف الرابع (4)</option>
+                  <option value="5">الصف الخامس (5)</option>
+                  <option value="6">الصف السادس (6)</option>
+                </select>
+
+                <select
+                  value={qFilterDiff}
+                  onChange={(e) => setQFilterDiff(e.target.value as 'ALL' | DifficultyLevel)}
+                  className="px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200"
+                >
+                  <option value="ALL">كل مستويات الصعوبة</option>
                   <option value="easy">🟢 سهل</option>
                   <option value="medium">🟡 متوسط</option>
                   <option value="hard">🔴 صعب</option>
                 </select>
+
+                <select
+                  value={qFilterStatus}
+                  onChange={(e) => setQFilterStatus(e.target.value as 'ALL' | QuestionReviewStatus)}
+                  className="px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200"
+                >
+                  <option value="ALL">كل الحالات</option>
+                  <option value="approved">🟢 معتمد (approved)</option>
+                  <option value="draft">🟡 مسودة (draft)</option>
+                  <option value="archived">📦 مؤرشف (archived)</option>
+                </select>
+
+                <select
+                  value={qFilterPhase}
+                  onChange={(e) => setQFilterPhase(e.target.value as 'ALL' | OfficialPhaseTargetId)}
+                  className="px-2.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-200"
+                >
+                  <option value="ALL">كل المراحل</option>
+                  <option value="stage_1_qualifiers">المرحلة ١: التأهيل</option>
+                  <option value="stage_2_semi_finals">المرحلة ٢: التصفيات</option>
+                  <option value="stage_3_finals">المرحلة ٣: النهائي</option>
+                </select>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">النقاط</label>
-                <input
-                  type="number"
-                  value={qPoints}
-                  onChange={(e) => setQPoints(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] text-slate-400 mb-1">الوقت (ثانية)</label>
-                <input
-                  type="number"
-                  value={qTime}
-                  onChange={(e) => setQTime(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-                />
-              </div>
-            </div>
+              {/* Filtered Questions List */}
+              {(() => {
+                const filteredQs = customQuestions.filter((q) => {
+                  const status = q.reviewStatus || 'approved';
+                  const phase = q.phaseId || 'stage_1_qualifiers';
+                  if (qFilterDomain !== 'ALL' && q.domain !== qFilterDomain) return false;
+                  if (qFilterGrade !== 'ALL' && q.grade !== qFilterGrade) return false;
+                  if (qFilterDiff !== 'ALL' && q.difficulty !== qFilterDiff) return false;
+                  if (qFilterStatus !== 'ALL' && status !== qFilterStatus) return false;
+                  if (qFilterPhase !== 'ALL' && phase !== qFilterPhase) return false;
+                  if (qSearchText.trim()) {
+                    const term = qSearchText.trim().toLowerCase();
+                    const inQ = (q.question || '').toLowerCase().includes(term);
+                    const inOpts = (q.options || []).some((o) =>
+                      (o || '').toLowerCase().includes(term)
+                    );
+                    if (!inQ && !inOpts) return false;
+                  }
+                  return true;
+                });
 
-            <textarea
-              rows={2}
-              value={qText}
-              onChange={(e) => setQText(e.target.value)}
-              placeholder="نص السؤال..."
-              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-            />
-
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="text"
-                value={qOpt0}
-                onChange={(e) => setQOpt0(e.target.value)}
-                placeholder="الاختيار 1"
-                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-              />
-              <input
-                type="text"
-                value={qOpt1}
-                onChange={(e) => setQOpt1(e.target.value)}
-                placeholder="الاختيار 2"
-                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-              />
-              <input
-                type="text"
-                value={qOpt2}
-                onChange={(e) => setQOpt2(e.target.value)}
-                placeholder="الاختيار 3"
-                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-              />
-              <input
-                type="text"
-                value={qOpt3}
-                onChange={(e) => setQOpt3(e.target.value)}
-                placeholder="الاختيار 4"
-                className="px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-              />
-            </div>
-
-            <select
-              value={qCorrect}
-              onChange={(e) => setQCorrect(Number(e.target.value))}
-              className="w-full px-3 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
-            >
-              <option value={0}>الإجابة الصحيحة: الاختيار 1</option>
-              <option value={1}>الإجابة الصحيحة: الاختيار 2</option>
-              <option value={2}>الإجابة الصحيحة: الاختيار 3</option>
-              <option value={3}>الإجابة الصحيحة: الاختيار 4</option>
-            </select>
-
-            <button
-              onClick={() => {
-                if (!qText.trim() || !qOpt0.trim() || !qOpt1.trim()) return;
-                const newQ: QualifierQuestion = {
-                  id: `cust-${Date.now()}`,
-                  domain: qDomain,
-                  difficulty: qDiff,
-                  grade: 'all',
-                  question: qText.trim(),
-                  options: [
-                    qOpt0.trim(),
-                    qOpt1.trim(),
-                    qOpt2.trim() || 'اختيار ثالث',
-                    qOpt3.trim() || 'اختيار رابع',
-                  ],
-                  correctIndex: qCorrect,
-                  points: qPoints,
-                  timeSeconds: qTime,
-                };
-                setCustomQuestions((prev) => [newQ, ...prev]);
-                setQText('');
-                setQOpt0('');
-                setQOpt1('');
-                setQOpt2('');
-                setQOpt3('');
-                notify('تمت إضافة السؤال بنجاح إلى بنك الأسئلة!');
-              }}
-              className="w-full py-2.5 rounded-xl bg-amber-400 text-slate-950 font-bold text-xs"
-            >
-              + حفظ السؤال في بنك المسابقة
-            </button>
-          </div>
-
-          <div className="lg:col-span-7 p-6 rounded-2xl bg-[#131F38] border border-slate-800 space-y-3">
-            <h3 className="text-base font-bold text-white font-display">
-              الأسئلة المضافة من المشرف ({customQuestions.length}) + 50 سؤالاً أساسياً معتمداً
-            </h3>
-            {customQuestions.length === 0 ? (
-              <p className="text-xs text-slate-400 py-8 text-center">
-                النظام يعمل حالياً بـ ٥٠ سؤالاً أساسياً موزعاً على الـ٨ مجالات. أي سؤال تضيفه هنا سيظهر فوراً!
-              </p>
-            ) : (
-              <div className="space-y-2.5 max-h-96 overflow-y-auto">
-                {customQuestions.map((q) => (
-                  <div
-                    key={q.id}
-                    className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between gap-3"
-                  >
-                    <div>
-                      <span className="text-[11px] text-amber-400">
-                        {DOMAIN_META[q.domain].label} · {q.points} نقطة
-                      </span>
-                      <div className="text-xs font-bold text-white mt-0.5">{q.question}</div>
+                if (filteredQs.length === 0) {
+                  return (
+                    <div className="p-10 rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 text-center space-y-2">
+                      <div className="text-2xl">📭</div>
+                      <div className="text-sm font-bold text-white">
+                        {customQuestions.length === 0
+                          ? 'بنك الأسئلة الرسمي فارغ حاليًا (0 سؤال)'
+                          : 'لا توجد أسئلة مطابقة لمعايير البحث أو الفلترة الحالية'}
+                      </div>
+                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                        {customQuestions.length === 0
+                          ? 'لم يتم إدخال أي أسئلة وهمية أو تجريبية. ابدئي بإضافة الأسئلة الحقيقية المعتمدة من النموذج المجاور لاستكمال الـ 30 سؤالًا للمرحلة الأولى.'
+                          : 'جربي تغيير فلاتر المجال أو الصف أو الحالة لعرض باقي الأسئلة.'}
+                      </p>
                     </div>
-                    <button
-                      onClick={() =>
-                        setCustomQuestions((prev) => prev.filter((item) => item.id !== q.id))
-                      }
-                      className="text-xs text-rose-400 hover:underline"
-                    >
-                      حذف
-                    </button>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+                    {filteredQs.map((q) => {
+                      const status: QuestionReviewStatus = q.reviewStatus || 'approved';
+                      const isPub =
+                        q.published !== undefined ? q.published : status === 'approved';
+                      const diffLabel =
+                        q.difficulty === 'easy'
+                          ? '🟢 سهل'
+                          : q.difficulty === 'hard'
+                          ? '🔴 صعب'
+                          : '🟡 متوسط';
+                      const gradeLabel =
+                        q.grade === 'all' ? 'الصفوف ٤-٦' : `الصف ${q.grade} ابتدائي`;
+
+                      return (
+                        <div
+                          key={q.id}
+                          className="p-4 rounded-2xl bg-slate-950/95 border border-slate-800 hover:border-slate-700 space-y-3 transition-all"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <span
+                                className="px-2.5 py-0.5 rounded-full font-extrabold bg-slate-900 border border-slate-700"
+                                style={{ color: DOMAIN_META[q.domain]?.color || '#F59E0B' }}
+                              >
+                                {DOMAIN_META[q.domain]?.label || q.domain}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 font-bold">
+                                {gradeLabel}
+                              </span>
+                              <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300">
+                                {diffLabel}
+                              </span>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full font-bold border ${
+                                  status === 'approved' && isPub
+                                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
+                                    : status === 'draft'
+                                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-300'
+                                    : 'bg-slate-800 border-slate-600 text-slate-400'
+                                }`}
+                              >
+                                {status === 'approved' && isPub
+                                  ? '🟢 معتمد ومنشور'
+                                  : status === 'approved' && !isPub
+                                  ? '🟡 معتمد (غير منشور)'
+                                  : status === 'draft'
+                                  ? '🟡 مسودة (Draft)'
+                                  : '📦 مؤرشف (Archived)'}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingQuestionId(q.id);
+                                  setQDomain(q.domain);
+                                  setQDiff(q.difficulty);
+                                  setQGrade(q.grade || 'all');
+                                  setQPhaseId(q.phaseId || 'stage_1_qualifiers');
+                                  setQReviewStatus(q.reviewStatus || 'approved');
+                                  setQPublished(
+                                    q.published !== undefined
+                                      ? q.published
+                                      : (q.reviewStatus || 'approved') === 'approved'
+                                  );
+                                  setQText(q.question);
+                                  setQContextPassage(q.contextPassage || '');
+                                  setQExplanation(q.explanation || '');
+                                  setQOpt0(q.options[0] || '');
+                                  setQOpt1(q.options[1] || '');
+                                  setQOpt2(q.options[2] || '');
+                                  setQOpt3(q.options[3] || '');
+                                  setQCorrect(q.correctIndex || 0);
+                                  setQPoints(q.points || 1);
+                                  setQTime(q.timeSeconds || 60);
+                                  setQValidationErrors([]);
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-amber-300 hover:border-amber-400 font-bold cursor-pointer"
+                              >
+                                ✏️ تعديل
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingQuestionId(null);
+                                  setQDomain(q.domain);
+                                  setQDiff(q.difficulty);
+                                  setQGrade(q.grade || 'all');
+                                  setQPhaseId(q.phaseId || 'stage_1_qualifiers');
+                                  setQReviewStatus('draft');
+                                  setQPublished(false);
+                                  setQText(`${q.question} (نسخة للتعديل)`);
+                                  setQContextPassage(q.contextPassage || '');
+                                  setQExplanation(q.explanation || '');
+                                  setQOpt0(q.options[0] || '');
+                                  setQOpt1(q.options[1] || '');
+                                  setQOpt2(q.options[2] || '');
+                                  setQOpt3(q.options[3] || '');
+                                  setQCorrect(q.correctIndex || 0);
+                                  setQValidationErrors([]);
+                                  notify('📋 تم نسخ بيانات السؤال إلى النموذج كمسودة لتعديله وحفظه.');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-sky-300 hover:border-sky-400 font-bold cursor-pointer"
+                              >
+                                📋 نسخ
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextStatus: QuestionReviewStatus =
+                                    status === 'approved' ? 'draft' : 'approved';
+                                  const nextPub = nextStatus === 'approved';
+                                  setCustomQuestions((prev) =>
+                                    prev.map((item) =>
+                                      item.id === q.id
+                                        ? {
+                                            ...item,
+                                            reviewStatus: nextStatus,
+                                            published: nextPub,
+                                            updatedAt: new Date().toISOString(),
+                                          }
+                                        : item
+                                    )
+                                  );
+                                  notify(
+                                    nextStatus === 'approved'
+                                      ? '🟢 تم اعتماد ونشر السؤال للاختبار الرسمي!'
+                                      : '🟡 تم تحويل السؤال إلى مسودة (موقوف من الاختبار).'
+                                  );
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-emerald-300 hover:border-emerald-400 font-bold cursor-pointer"
+                              >
+                                {status === 'approved' && isPub ? '⏸️ إيقاف/مسودة' : '✓ اعتماد ونشر'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomQuestions((prev) =>
+                                    prev.filter((item) => item.id !== q.id)
+                                  );
+                                  if (editingQuestionId === q.id) {
+                                    setEditingQuestionId(null);
+                                  }
+                                  notify('🗑️ تم حذف السؤال من بنك الأسئلة.');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-300 hover:bg-rose-500 hover:text-white font-bold cursor-pointer"
+                              >
+                                حذف
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="text-xs font-bold text-white leading-relaxed">
+                            {q.question}
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
+                            {(q.options || []).map((optText, idx) => (
+                              <div
+                                key={idx}
+                                className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
+                                  idx === q.correctIndex
+                                    ? 'bg-emerald-500/15 border-emerald-400/60 text-emerald-200 font-bold'
+                                    : 'bg-slate-900/90 border-slate-800 text-slate-300'
+                                }`}
+                              >
+                                <span>
+                                  {idx + 1}. {optText}
+                                </span>
+                                {idx === q.correctIndex && <span>✓ الصحيحة</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })()}
+            </div>
           </div>
         </div>
       )}
@@ -1612,6 +2608,131 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ⚙️ إعدادات دورة التصفيات الإلكترونية الذاتية والحصص ومسار التأهل
           </h3>
 
+          {/* ==================== 🏛️ SEASONS MANAGEMENT & ARCHIVE (إدارة المواسم وأرشفة الموسم السابق) ==================== */}
+          <div className="p-5 rounded-2xl bg-gradient-to-l from-[#18294D] to-slate-950 border-2 border-amber-400/60 space-y-5 text-xs shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-amber-400 font-extrabold text-xs">
+                  🏛️ إدارة المواسم والأرشيف التاريخي (Seasons & Archive)
+                </span>
+                <h4 className="text-base font-bold text-white font-display mt-0.5">
+                  تفعيل موسم جديد مع الاحتفاظ بأرشيف المواسم السابقة (`seasonsArchive`)
+                </h4>
+              </div>
+              <span className="px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400 text-amber-300 font-extrabold">
+                الأرشيف المحفوظ: {effectiveSeasonsArchive.length} مواسم
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-amber-300 font-bold mb-1">اسم الموسم الجديد</label>
+                <input
+                  type="text"
+                  value={newSeasonTitle}
+                  onChange={(e) => setNewSeasonTitle(e.target.value)}
+                  placeholder="مثال: الموسم الثاني — دماغ عالية ٢٠٢٧"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-amber-300 font-bold mb-1">العام الدراسي للموسم</label>
+                <input
+                  type="text"
+                  value={newSeasonYear}
+                  onChange={(e) => setNewSeasonYear(e.target.value)}
+                  placeholder="2026 / 2027"
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-amber-300 font-bold mb-1">تاريخ بداية الموسم الجديد</label>
+                <input
+                  type="date"
+                  value={newSeasonStartDate}
+                  onChange={(e) => setNewSeasonStartDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-amber-300 font-bold mb-1">تاريخ نهاية الموسم الجديد</label>
+                <input
+                  type="date"
+                  value={newSeasonEndDate}
+                  onChange={(e) => setNewSeasonEndDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetStudentsOnNewSeason}
+                  onChange={(e) => setResetStudentsOnNewSeason(e.target.checked)}
+                  className="accent-amber-400"
+                />
+                <span>تصفير قائمة الطلاب الحاليين عند فتح الموسم الجديد (بعد حفظ إحصائياتهم وأبطالهم في الأرشيف)</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={handleActivateNewSeason}
+                className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs cursor-pointer shadow-lg transition-all"
+              >
+                🚀 أرشفة الموسم الحالي وتفعيل الموسم الجديد الآن
+              </button>
+            </div>
+
+            {/* Archived Seasons List Preview inside AdminDashboard */}
+            {effectiveSeasonsArchive.length > 0 && (
+              <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                <div className="font-bold text-emerald-300">
+                  📚 سجل المواسم المحفوظة في الأرشيف (`seasonsArchive`):
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {effectiveSeasonsArchive.map((arch) => (
+                    <div
+                      key={arch.id}
+                      className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="font-bold text-white text-xs">
+                          {arch.seasonName || arch.title} ({arch.year})
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          👨‍🎓 {arch.totalStudents ?? arch.totalParticipants ?? 0} طالب · 🏫{' '}
+                          {arch.totalSchools ?? 0} مدرسة · 🗺️ {arch.totalGovernorates ?? 0} محافظة
+                        </div>
+                        {arch.championStudentName && (
+                          <div className="text-[11px] text-amber-300 font-semibold">
+                            🥇 بطل الموسم: {arch.championStudentName} — 🏫 {arch.topSchoolName || arch.championSchoolName}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettings((prev) => ({
+                            ...prev,
+                            currentSeasonId: arch.id,
+                            seasonName: arch.seasonName || arch.title || prev.seasonName,
+                            seasonYear: String(arch.year || ''),
+                          }));
+                          notify(`تم التبديل لاستعراض/تفعيل بيانات موسم: ${arch.seasonName || arch.title}`);
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-400 hover:text-slate-950 text-amber-300 font-bold text-[11px] cursor-pointer transition-colors shrink-0"
+                      >
+                        تعيين كموسم حالي
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Season Name, Qualification Path Mode (#45) & Stage Quotas (#44) */}
           <div className="p-5 rounded-2xl bg-slate-950/90 border border-emerald-400/40 space-y-4 text-xs">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1619,7 +2740,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <label className="block text-emerald-300 font-bold mb-1">🏷️ اسم الموسم الحالي</label>
                 <input
                   type="text"
-                  value={settings.seasonName || 'موسم عباقرة عيون مصر ٢٠٢٦'}
+                  value={settings.seasonName || 'الموسم الأول — دماغ عالية'}
                   onChange={(e) => setSettings({ ...settings, seasonName: e.target.value })}
                   className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
                 />
@@ -1778,11 +2899,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <label className="block text-amber-300 font-bold mb-1">🏫 اسم المدرسة الافتراضي</label>
               <input
                 type="text"
-                value={settings.defaultSchoolName || 'مدرسة عيون مصر للغات'}
+                value={settings.defaultSchoolName || ''}
                 onChange={(e) =>
                   setSettings({ ...settings, defaultSchoolName: e.target.value })
                 }
-                placeholder="مثال: مدرسة عيون مصر للغات"
+                placeholder="اختياري: اتركه فارغاً لجميع مدارس الجمهورية"
                 className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
               />
             </div>
@@ -1790,11 +2911,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <label className="block text-amber-300 font-bold mb-1">📍 المنطقة / المحافظة الافتراضية</label>
               <input
                 type="text"
-                value={settings.defaultRegion || 'القاهرة'}
+                value={settings.defaultRegion || ''}
                 onChange={(e) =>
                   setSettings({ ...settings, defaultRegion: e.target.value })
                 }
-                placeholder="مثال: القاهرة / الجيزة"
+                placeholder="اختياري: اتركه فارغاً لجميع المحافظات"
                 className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white"
               />
             </div>
@@ -2017,7 +3138,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           <div className="p-5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-400">
-                🎮 تفعيل أو إيقاف ألعاب وتحديات «عباقرة عيون مصر» (#27)
+                🎮 تفعيل أو إيقاف ألعاب وتحديات «دماغ عالية» (#27)
               </span>
               <span className="text-[11px] text-slate-400">
                 يمكن للمشرفة التحكم في الألعاب المتاحة للطلاب والفرق
@@ -2027,15 +3148,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               {[
                 { id: 'falcon_eye', label: '🦅 عين الصقر' },
                 { id: 'lightning_speed', label: '⚡ سرعة البرق' },
-                { id: 'genius_mind', label: '🧠 مخ العباقرة' },
+                { id: 'genius_mind', label: '🧠 مخ دماغ عالية' },
                 { id: 'mystery_fact', label: '🔍 المعلومة الغامضة' },
                 { id: 'risk_ladder', label: '🎲 تحدي المخاطرة' },
                 { id: 'point_heist', label: '🏴‍☠️ سرقة النقاط' },
                 { id: 'black_box', label: '📦 الصندوق الأسود' },
                 { id: 'no_words', label: '🙊 ممنوع الكلام' },
                 { id: 'egypt_minute', label: '🇪🇬 مصر في دقيقة' },
-                { id: 'genius_room', label: '🚪 غرفة العباقرة' },
-                { id: 'classic_board', label: '📺 لوحة العباقرة' },
+                { id: 'genius_room', label: '🚪 غرفة دماغ عالية' },
+                { id: 'classic_board', label: '📺 لوحة مجالات دماغ عالية' },
                 { id: 'wheel_of_fortune', label: '🎡 عجلة الحظ' },
               ].map((gm) => {
                 const isEnabled =
@@ -2071,7 +3192,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         ];
                         const next = e.target.checked
                           ? [...current, gm.id as any]
-                          : current.filter((x) => x !== gm.id);
+                          : current.filter((x: string) => x !== gm.id);
                         setSettings({ ...settings, enabledGames: next });
                       }}
                       className="accent-emerald-400"
@@ -2091,10 +3212,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
               <div>
                 <h3 className="text-lg font-bold text-white font-display">
-                  🧩 إنشاء فريق جديد في برنامج «عباقرة عيون مصر» (٤ أو ٥ لاعبين)
+                  🧩 إنشاء فريق جديد في مسابقة «دماغ عالية» (٤ أو ٥ لاعبين)
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  يمكنك تكوين الفريق من ٤ لاعبين أساسيين، أو ٥ لاعبين (٤ أساسيين + لاعب خامس أساسي أو احتياطي) على غرار نظام برنامج العباقرة.
+                  يمكنك تكوين الفريق من ٤ لاعبين أساسيين، أو ٥ لاعبين (٤ أساسيين + لاعب خامس أساسي أو احتياطي) للمنافسة في استوديو دماغ عالية.
                 </p>
               </div>
 
@@ -2132,7 +3253,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="مثال: 🦁 فريق أسود عيون مصر"
+                  placeholder="مثال: 🧠 فريق أبطال دماغ عالية"
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white"
                 />
               </div>
@@ -2155,7 +3276,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   type="text"
                   value={teamSchool}
                   onChange={(e) => setTeamSchool(e.target.value)}
-                  placeholder="مثال: مدرسة عيون مصر للغات"
+                  placeholder="اكتب اسم المدرسة..."
                   className="w-full px-3 py-2 text-xs bg-slate-900 border border-slate-700 rounded-lg text-white"
                 />
               </div>
@@ -2270,16 +3391,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 const newTeam: Team = {
                   id: `team-${ts}`,
                   name: teamName.trim(),
-                  schoolName: teamSchool.trim() || settings.defaultSchoolName || 'مدرسة عيون مصر للغات',
+                  schoolName: teamSchool.trim() || settings.defaultSchoolName || 'المدرسة المسجلة',
                   region: teamRegion.trim() || settings.defaultRegion || 'القاهرة',
                   country: teamCountry.trim() || settings.defaultCountry || 'مصر 🇪🇬',
                   emblem: teamEmblem || '🏆',
                   color: teamColor,
                   captainId: builtMembers[0].id,
-                  points: 100,
+                  points: 0,
                   wins: 0,
                   matchesPlayed: 0,
-                  titleBadge: '🌟 عباقرة عيون مصر',
+                  titleBadge: '🧠 دماغ عالية',
                   cards: { challengeCard: true, swapQuestionCard: true, doublePointsCard: true },
                   members: builtMembers,
                 };
@@ -2310,7 +3431,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       التشكيل الحالي: {t.members.length} لاعبين (الحد المسموح: 4 أو 5 لاعبين)
                     </span>
                     <span className="text-[11px] text-emerald-300 block mt-0.5">
-                      🏫 {t.schoolName || settings.defaultSchoolName || 'مدرسة عيون مصر للغات'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
+                      🏫 {t.schoolName || settings.defaultSchoolName || 'المدرسة المسجلة'} · 📍 {t.region || settings.defaultRegion || 'القاهرة'} · 🌍 {t.country || settings.defaultCountry || 'مصر 🇪🇬'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

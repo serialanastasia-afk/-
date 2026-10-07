@@ -63,6 +63,7 @@ export type QualifierDomain =
   | 'math'
   | 'arabic'
   | 'egypt_world'
+  | 'english'
   | 'logic'
   | 'observation'
   | 'general_culture'
@@ -70,8 +71,17 @@ export type QualifierDomain =
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
+export type QuestionReviewStatus = 'draft' | 'approved' | 'archived';
+
+export type OfficialPhaseTargetId =
+  | 'stage_1_qualifiers'
+  | 'stage_2_semi_finals'
+  | 'stage_3_finals';
+
 export interface QualifierQuestion {
   id: string;
+  seasonId?: string;
+  phaseId?: OfficialPhaseTargetId;
   domain: QualifierDomain;
   difficulty: DifficultyLevel;
   stage?: EducationalStage | 'all';
@@ -80,9 +90,129 @@ export interface QualifierQuestion {
   contextPassage?: string; // للمعلومة الجديدة أو اللغز
   visualGrid?: string[]; // لأسئلة الملاحظة البصرية والأنماط
   options: string[];
-  correctIndex: number;
+  correctIndex?: number; // Strictly omitted from public_platform/custom_questions!
+  explanation?: string;  // Strictly omitted from public_platform/custom_questions!
   points: number;
   timeSeconds: number;
+  reviewStatus?: QuestionReviewStatus;
+  published?: boolean;
+  version?: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Internal mapping when options are shuffled on the client (index in shuffled options -> original 0..3 option index)
+  optionOriginalIndices?: number[];
+}
+
+/**
+ * Sanitized Public Question Delivery Schema (`public_platform/custom_questions`).
+ * Contains ONLY the fields needed by the student to render and answer the question.
+ * NEVER contains `correctIndex`, `explanation`, `createdBy`, `reviewStatus`, or answer key data.
+ */
+export interface PublicExamQuestion {
+  id: string;
+  seasonId: string;
+  phaseId: OfficialPhaseTargetId;
+  grade: GradeNumber | 'all';
+  stage: EducationalStage | 'all';
+  domain: QualifierDomain;
+  difficulty: DifficultyLevel;
+  question: string;
+  contextPassage?: string;
+  visualGrid?: string[];
+  options: string[];
+  points: number;
+  timeSeconds: number;
+  version: number;
+}
+
+/**
+ * Private Answer Key Document stored in `question_answer_keys/{keyDocId}`
+ * where `keyDocId = "${questionId}_opt_${correctIndex}"`.
+ * Collection has `allow list: if isAdmin(); allow get: if true;` so a client can ONLY verify
+ * a specific chosen answer via `getDoc` without ever being able to list or read `correctIndex`!
+ */
+export interface PrivateQuestionAnswerKeyDoc {
+  questionId: string;
+  optionIndex: number;
+  isCorrect: true;
+  domain: QualifierDomain;
+  version: number;
+  seasonId: string;
+  phaseId: OfficialPhaseTargetId;
+  updatedAt: string;
+}
+
+export interface QuestionAttemptVersionItem {
+  questionId: string;
+  version: number;
+  domain: QualifierDomain;
+  selectedOptionIndex: number | null;
+}
+
+/**
+ * Sanitized Public Readiness Summary (`public_platform/custom_questions`).
+ * Contains ONLY aggregate counts per domain so the public UI can show READY / NOT READY
+ * WITHOUT exposing a single question text, option, or ID before an official attempt starts!
+ */
+export interface PublicQuestionBankReadinessSummary {
+  id: 'custom_questions';
+  updatedAt: string;
+  isReady: boolean;
+  totalRequired: number;
+  totalAvailable: number;
+  totalInBank: number;
+  draftCount: number;
+  archivedCount: number;
+  fulfilledCount: number;
+  missingTotal: number;
+  domainStatus: {
+    domain: QualifierDomain;
+    required: number;
+    available: number;
+    totalDomainInBank: number;
+    shortage: number;
+    isComplete: boolean;
+  }[];
+  missingDomains: {
+    domain: QualifierDomain;
+    required: number;
+    available: number;
+    shortage: number;
+  }[];
+}
+
+/**
+ * Official Server-Managed Exam Attempt (`exam_attempts/{attemptId}`).
+ * Created and updated ONLY by the Trusted Backend (`/api/exam/start`, `/api/exam/submit`).
+ * Contains ONLY the 30 questions selected for this attempt (with options already randomized
+ * by the server and NO `correctIndex` or `optionOriginalIndices`).
+ */
+export interface OfficialExamAttempt {
+  id: string;
+  attemptId: string;
+  studentId: string;
+  ownerUid: string;
+  participationCode: string;
+  seasonId: string;
+  phaseId: OfficialPhaseTargetId;
+  grade: GradeNumber;
+  stage: EducationalStage;
+  questionIds: string[];
+  questionVersions: {
+    questionId: string;
+    version: number;
+    domain: QualifierDomain;
+  }[];
+  questions: PublicExamQuestion[];
+  startedAt: string;
+  startedAtMs: number;
+  expiresAt: string;
+  expiresAtMs: number;
+  submittedAt?: string;
+  status: 'in_progress' | 'submitted' | 'expired';
+  score?: number;
+  correctCount?: number;
 }
 
 export interface AutomatedGradingReport {
@@ -97,6 +227,7 @@ export interface AutomatedGradingReport {
   submitTimestamp: string;
   autoSubmittedOnTimeout?: boolean;
   questionOrderIds?: string[];
+  questionVersions?: QuestionAttemptVersionItem[];
 }
 
 export type SchoolType =
@@ -110,6 +241,7 @@ export type SchoolType =
 
 export interface RegisteredSchool {
   id: string;
+  ownerUid?: string;
   schoolCode: string;
   name: string;
   schoolType: SchoolType;
@@ -162,6 +294,7 @@ export interface SchoolScoringFormula {
 
 export interface StudentProfile {
   id: string;
+  ownerUid?: string;
   name: string;
   grade: GradeNumber;
   stage?: EducationalStage;
@@ -208,11 +341,14 @@ export interface StudentProfile {
     observation: number;
     math: number;
     egypt_world: number;
+    english?: number;
     general_culture: number;
     technology: number;
   };
   qualifiedForFinals: boolean;
   tieBreakerNeeded?: boolean;
+  xp?: number;
+  achievementsCount?: number;
   badges: string[];
 }
 
@@ -274,6 +410,7 @@ export interface TeamMember {
 
 export interface Team {
   id: string;
+  ownerUid?: string;
   name: string;
   schoolName?: string;
   region?: string;
@@ -317,8 +454,24 @@ export type ChallengeGameId =
   | 'escape_room'
   | 'classic_board';
 
+export interface RealPortfolioProject {
+  id: string;
+  name: string;
+  description: string;
+  category: 'competition' | 'project' | 'game' | 'app' | 'invention';
+  status: 'published' | 'draft' | 'coming_soon';
+  image: string; // empty if no real image provided
+  realUrl: string; // empty if no real link provided ("الرابط سيتم إضافته لاحقًا")
+  features: string[];
+  content: string;
+  createdAt: string;
+  isInternalPlatform?: boolean;
+}
+
 export type AppView =
   | 'home'
+  | 'real_projects'
+  | 'content_management'
   | 'annual_roadmap'
   | 'journey'
   | 'qualifiers'
@@ -350,10 +503,85 @@ export interface CompetitionAward {
   awardedAt?: string;
 }
 
+export type SeasonDocumentStatus = 'draft' | 'registration_open' | 'active' | 'ended';
+
+export interface QualifierDomainQuota {
+  arabic: number;
+  math: number;
+  science: number;
+  egypt_world: number;
+  english: number;
+  general_culture: number;
+  logic: number;
+}
+
+export interface SeasonOfficialPhase {
+  phaseId: 'stage_1_qualifiers' | 'stage_2_semi_finals' | 'stage_3_finals';
+  order: 1 | 2 | 3;
+  title: string;
+  description: string;
+  status: 'locked_until_ready' | 'registration_open' | 'active' | 'completed';
+  requiresQuestionBankComplete: boolean;
+  questionsCount: number | null;
+  durationMinutes: number | null;
+  allowedAttempts: number | null;
+  questionFormat: 'multiple_choice';
+  randomizeQuestions: boolean;
+  randomizeOptions: boolean;
+  allowBackNavigation: boolean;
+  wrongAnswerPoints: 0;
+  unansweredPoints: 0;
+  enableWrongAnswerPenalty: false;
+  enableRiskPenalty: false;
+  baseScoreRule: 'correct_count';
+  tieBreakerRule: 'completion_speed';
+  domainBlueprint?: QualifierDomainQuota;
+}
+
+export interface SeasonOneConfig {
+  id: 'season_1';
+  seasonId: string;
+  name: string;
+  status: SeasonDocumentStatus;
+  registrationStart: string;
+  registrationEnd: string;
+  competitionStart: string;
+  competitionEnd: string;
+  eligibleGrades: GradeNumber[];
+  stages: EducationalStage[];
+  officialPhases?: SeasonOfficialPhase[];
+  qualifierBlueprint?: QualifierDomainQuota;
+  examSettings: {
+    questionsCount: number | null;
+    durationMinutes: number | null;
+    allowedAttempts: number | null;
+    randomizeQuestions: boolean;
+    randomizeOptions: boolean;
+    allowBackNavigation: boolean;
+  };
+  scoringSettings: {
+    scoringMethod: 'standard_points' | 'speed_weighted' | 'difficulty_weighted' | '';
+    enableTieBreaker: boolean;
+    enableRiskPenalty: boolean;
+  };
+  awards: {
+    id: string;
+    title: string;
+    description: string;
+    categoryType: 'student' | 'team' | 'both';
+  }[];
+  publicVisibility: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CompetitionSettings {
   appProfileImage?: string;
+  currentSeasonId?: string;
+  seasonYear?: string;
   seasonName?: string;
   seasonStatus?: SeasonLifecycleStatus;
+  seasonsArchive?: SeasonArchiveItem[];
   resultsCertified?: boolean;
   registrationStartDate?: string;
   registrationEndDate?: string;
@@ -365,6 +593,8 @@ export interface CompetitionSettings {
   endDate: string;
   participatingStages?: EducationalStage[];
   participatingGrades?: GradeNumber[];
+  officialPhases?: SeasonOfficialPhase[];
+  qualifierBlueprint?: QualifierDomainQuota;
   questionsCountPerExam?: number;
   qualifierDurationMinutes: number;
   allowedAttemptsPerStudent?: number;

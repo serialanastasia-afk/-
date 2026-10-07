@@ -118,12 +118,12 @@ export const NationalRankingsView: React.FC<NationalRankingsViewProps> = ({
 
   return (
     <section className="space-y-8">
-      {/* Demo Data Notice Banner (#31) */}
-      <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-400/40 flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div className="flex items-center gap-2 text-amber-300 font-bold">
+      {/* Real-Time Cloud Sync Banner */}
+      <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-400/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2 text-emerald-300 font-bold">
           <Sparkles className="w-4 h-4 shrink-0" />
           <span>
-            تنبيه الشفافية: تتضمن هذه اللوحة «بيانات تجريبية (Demo Data)» لمدارس ومحافظات مصرية مختلفة لعرض نظام الترتيب الوطني، بجانب أي طلاب تسجلهم الآن.
+            ☁️ متصل مباشرة بقاعدة البيانات السحابية الحقيقية (Firebase Firestore): جميع الأسماء والنتائج المعروضة هنا هي لطلاب حقيقيين سجلوا فعلياً.
           </span>
         </div>
         <span className="px-2.5 py-0.5 rounded bg-slate-950 text-emerald-300 font-semibold">
@@ -136,10 +136,10 @@ export const NationalRankingsView: React.FC<NationalRankingsViewProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
             <span className="text-xs font-extrabold text-amber-400">
-              🇪🇬 عباقرة الجمهورية · الترتيب الرسمي العادل حسب كل مرحلة تعليمية
+              🇪🇬 أبطال دماغ عالية · الترتيب الرسمي العادل حسب كل مرحلة تعليمية
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
-              🏅 ترتيب العباقرة وقاعة أبطال الجمهورية
+              🏅 ترتيب أبطال «دماغ عالية» وقاعة شرف الجمهورية
             </h2>
             <p className="text-xs text-slate-300 mt-1 max-w-2xl">
               منعاً للظلم بين الأعمار المختلفة، يتم الترتيب الأكاديمي الأساسي بشكل مستقل تماماً داخل كل مرحلة تعليمية (ابتدائي صغير ≠ ابتدائي كبير ≠ إعدادي ≠ ثانوي) حسب النقاط ثم زمن الإجابة.
@@ -230,6 +230,17 @@ export const NationalRankingsView: React.FC<NationalRankingsViewProps> = ({
           </span>
         </div>
 
+        {republicTopThreeForStage.length === 0 ? (
+          <div className="p-8 rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 text-center space-y-2">
+            <div className="text-2xl">⏳</div>
+            <div className="text-sm font-bold text-amber-300">
+              قريبًا — سيتم عرض أوائل الجمهورية فور تسجيل الطلاب وخوض التصفيات الحقيقية
+            </div>
+            <p className="text-xs text-slate-400">
+              لا يتم عرض أي أسماء أو نتائج مختلقة؛ جميع المراكز تُحسب تلقائياً من مشاركات الطلاب الفعلية فقط.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {republicTopThreeForStage.map((champ, idx) => {
             const medalLabel =
@@ -299,6 +310,7 @@ export const NationalRankingsView: React.FC<NationalRankingsViewProps> = ({
             );
           })}
         </div>
+        )}
       </div>
 
       {/* ==================== FILTER BAR: STAGE + GOVERNORATE + SCHOOL (#9) ==================== */}
@@ -402,7 +414,13 @@ export const NationalRankingsView: React.FC<NationalRankingsViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {stageFilteredStudents.map((stu, idx) => {
+              {stageFilteredStudents.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-10 text-center text-slate-400">
+                    لا توجد بيانات حقيقية متاحة حاليًا. سيتم عرض النتائج هنا عند تسجيل البيانات الفعلية للطلاب.
+                  </td>
+                </tr>
+              ) : stageFilteredStudents.map((stu, idx) => {
                 const stg = stu.stage || resolveStageFromGrade(stu.grade);
                 return (
                   <tr key={stu.id} className="hover:bg-slate-900/50">
@@ -602,6 +620,23 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
 
       {/* TAB 1: TOP SCHOOLS IN THE REPUBLIC (#11) */}
       {activeTab === 'schools_ranking' && (
+        rankings.topSchools.length === 0 ? (
+          <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-3">
+            <div className="text-3xl">🏫</div>
+            <h3 className="text-lg font-bold text-white font-display">
+              لم يتم تسجيل مدارس مشاركة بعد — سيتم إضافة المحتوى والنتائج الحقيقية فور مشاركة المدارس
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl mx-auto">
+              التزاماً بعرض البيانات الحقيقية فقط دون اختلاق، يظهر ترتيب المدارس تلقائياً بمجرد تسجيل الطلاب أو المدارس الفعلية.
+            </p>
+            <button
+              onClick={() => setActiveTab('register_school')}
+              className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs cursor-pointer"
+            >
+              + سجّل مدرستك الحقيقية الآن
+            </button>
+          </div>
+        ) : (
         <div className="space-y-6">
           {/* Top 3 Podium Schools */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -737,6 +772,7 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* TAB 2: EDUCATIONAL ADMINISTRATIONS RANKING (#13) */}
@@ -751,6 +787,17 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
             </h3>
           </div>
 
+          {rankings.topAdministrations.length === 0 ? (
+            <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-2">
+              <div className="text-3xl">🏛️</div>
+              <h3 className="text-lg font-bold text-white font-display">
+                لا توجد بيانات حقيقية متاحة حاليًا.
+              </h3>
+              <p className="text-xs text-slate-400 max-w-xl mx-auto">
+                سيتم عرض النتائج هنا عند تسجيل البيانات الفعلية للطلاب والمدارس في قاعدة البيانات.
+              </p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {rankings.topAdministrations.map((adm, idx) => (
               <div
@@ -794,11 +841,23 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
       {/* TAB 3: DEDICATED SCHOOL PROFILE PAGE (#14: 🏫 صفحة المدرسة ونجوم المدرسة) */}
-      {activeTab === 'school_profile' && activeSchoolSummary && (
+      {activeTab === 'school_profile' && (
+        !activeSchoolSummary ? (
+          <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-2">
+            <div className="text-3xl">🏫</div>
+            <h3 className="text-lg font-bold text-white font-display">
+              لا توجد بيانات حقيقية متاحة حاليًا.
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl mx-auto">
+              سيتم عرض صفحة المدرسة ونجومها هنا عند تسجيل المدارس والطلاب الحقيقيين في قاعدة البيانات السحابية.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-6">
           <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#162647] via-[#111C35] to-[#0B1120] border-2 border-amber-400/70 space-y-6 shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-5">
@@ -920,6 +979,7 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* TAB 4: BULK SCHOOL REGISTRATION (#22: 🏫 تسجيل مدرسة وإصدار كود مدرسة وأكواد طلاب) */}
@@ -1196,22 +1256,28 @@ export const SchoolsHubView: React.FC<SchoolsHubViewProps> = ({
                 📋 المدارس المسجلة رسمياً في المنصة ({registeredSchools.length})
               </h4>
               <div className="space-y-2 max-h-[380px] overflow-y-auto">
-                {registeredSchools.map((rs) => (
-                  <div
-                    key={rs.id}
-                    className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-white">{rs.name}</div>
-                      <div className="text-[11px] text-slate-400">
-                        📍 {rs.administration} · 🗺️ {rs.governorate} · {SCHOOL_TYPE_LABELS[rs.schoolType]}
-                      </div>
-                    </div>
-                    <span className="font-mono-num text-amber-400 font-bold">
-                      {rs.schoolCode}
-                    </span>
+                {registeredSchools.length === 0 ? (
+                  <div className="p-6 rounded-xl bg-slate-950/80 border border-dashed border-slate-800 text-center text-xs text-slate-400">
+                    لا توجد بيانات حقيقية متاحة حاليًا. سيتم عرض المدارس المسجلة هنا فور تسجيلها الفعلي.
                   </div>
-                ))}
+                ) : (
+                  registeredSchools.map((rs) => (
+                    <div
+                      key={rs.id}
+                      className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-white">{rs.name}</div>
+                        <div className="text-[11px] text-slate-400">
+                          📍 {rs.administration} · 🗺️ {rs.governorate} · {SCHOOL_TYPE_LABELS[rs.schoolType]}
+                        </div>
+                      </div>
+                      <span className="font-mono-num text-amber-400 font-bold">
+                        {rs.schoolCode}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1270,8 +1336,8 @@ export const EgyptGovernoratesMapView: React.FC<EgyptGovernoratesMapViewProps> =
         qualifiedCount: govStudents.filter((s) => s.qualifiedForFinals).length,
         topScore: topStudent?.scores.total || 0,
         topStudent,
-        topSchoolName: topStudent?.schoolName || uniqueSchools[0] || 'متاح للتسجيل',
-        governoratePoints: summary?.compositePoints || govStudents.length * 120,
+        topSchoolName: topStudent?.schoolName || uniqueSchools[0] || 'لا توجد بيانات حقيقية متاحة حاليًا',
+        governoratePoints: govStudents.length > 0 ? (summary?.compositePoints || 0) : 0,
         studentsList: sortedStudents,
       };
     });
@@ -1292,7 +1358,7 @@ export const EgyptGovernoratesMapView: React.FC<EgyptGovernoratesMapViewProps> =
       <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-l from-[#18294D] via-[#131F38] to-[#0D1527] border-2 border-amber-400/60 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <span className="text-xs font-extrabold text-amber-400">
-            🗺️ خريطة عباقرة مصر التفاعلية · تغطية جميع محافظات الجمهورية الـ٢٧
+            🗺️ خريطة أبطال «دماغ عالية» التفاعلية · تغطية جميع محافظات الجمهورية الـ٢٧
           </span>
           <h2 className="text-2xl sm:text-3xl font-bold text-white font-display mt-1">
             اختر أي محافظة مصرية لاستعراض مدارسها، إداراتها، وأبطالها المتأهلين
@@ -1593,7 +1659,7 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
                 </span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-white font-display">
-                خريطة المراحل والتصفيات السنوية لمسابقة «عباقرة عيون مصر»
+                خريطة المراحل والتصفيات السنوية لمسابقة «دماغ عالية»
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 max-w-3xl leading-relaxed">
                 تستمر المسابقة طوال العام عبر <strong>٦ مراحل تصفيات متدرجة</strong> تبدأ من تصفيات المدارس في الخريف، مروراً بتصفيات الإدارات التعليمية والتحدي الشتوي، ثم تصفيات المحافظات الـ٢٧ في الربيع، وصولاً إلى الأدوار الإقصائية والنهائيات الكبرى للجمهورية في الصيف!
@@ -1824,7 +1890,13 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
               )}
             </div>
 
-            {selectedCertStudent && (
+            {!selectedCertStudent ? (
+              <div className="p-8 rounded-2xl bg-slate-950/80 border border-dashed border-slate-800 text-center space-y-2 text-xs text-slate-400">
+                <div className="text-2xl">👨‍🎓</div>
+                <div className="font-bold text-white">لا توجد بيانات حقيقية متاحة حاليًا</div>
+                <p>سيتم عرض سجل تأهل الطالب عبر المراحل الست هنا فور تسجيل الطلاب وخوض التصفيات الفعلية.</p>
+              </div>
+            ) : (
               <div className="space-y-3">
                 <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 flex items-center justify-between text-xs">
                   <div>
@@ -1842,16 +1914,14 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
                 </div>
 
                 <div className="space-y-2">
-                  {annualPhases.map((ph, idx) => {
+                  {annualPhases.map((ph) => {
                     const activeOrder =
                       annualPhases.find((p) => p.id === currentActivePhaseId)?.order || 2;
                     const isPassed = ph.order < activeOrder && selectedCertStudent.completedQualifier;
                     const isCurrent = ph.order === activeOrder;
                     const phaseScore =
-                      selectedCertStudent.annualPhaseScores?.[ph.id] ||
-                      (isPassed
-                        ? Math.max(350, selectedCertStudent.scores.total - (2 - idx) * 15)
-                        : isCurrent && selectedCertStudent.completedQualifier
+                      selectedCertStudent.annualPhaseScores?.[ph.id] ??
+                      (isCurrent && selectedCertStudent.completedQualifier
                         ? selectedCertStudent.scores.total
                         : null);
 
@@ -2053,33 +2123,58 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
     );
   }
 
-  if (mode === 'certificates' && selectedCertStudent) {
-    const stg = selectedCertStudent.stage || resolveStageFromGrade(selectedCertStudent.grade);
+  if (mode === 'certificates') {
+    const eligibleStudents = students.filter((s) => s.completedQualifier);
+    const eligibleCertStudent =
+      (selectedCertStudent && selectedCertStudent.completedQualifier
+        ? selectedCertStudent
+        : eligibleStudents[0]) || null;
+
+    if (!eligibleCertStudent) {
+      return (
+        <section className="max-w-3xl mx-auto p-10 rounded-3xl bg-[#131F38] border border-amber-400/40 text-center space-y-4">
+          <div className="text-4xl">📜</div>
+          <h2 className="text-2xl font-bold text-white font-display">
+            مركز الشهادات الرقمية — يتطلب إتمام التصفية الإلكترونية أولاً
+          </h2>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            لا يتم إصدار شهادات لطالب غير موجود أو لم يكمل الاختبار الفعلي بعد. بمجرد تسجيل الطالب وإتمام التصفية الإلكترونية، تصدر له الشهادة الرقمية المعتمدة باسمه ومدرسته ودرجته الفعلية.
+          </p>
+          <button
+            onClick={() => onNavigate('qualifiers')}
+            className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-extrabold text-xs cursor-pointer"
+          >
+            📝 انتقل للتسجيل وإتمام التصفية الحقيقية
+          </button>
+        </section>
+      );
+    }
+    const stg = eligibleCertStudent.stage || resolveStageFromGrade(eligibleCertStudent.grade);
     const certMetaMap = {
       participation: {
         title: '📜 شهادة مشاركة وطنية معتمدة',
-        badge: '🏅 وسام المشاركة المشرفة في مسابقة عباقرة عيون مصر',
-        subtitle: 'تقديراً للمشاركة الفعالة والتميز المعرفي في تصفيات الجمهورية',
+        badge: '🏅 وسام المشاركة المشرفة في مسابقة دماغ عالية',
+        subtitle: 'تقديراً للمشاركة الفعالة والتميز المعرفي في تصفيات مسابقة المعرفة والذكاء والتفكير',
       },
       excellence: {
         title: '🌟 شهادة تفوق وتميز علمي',
-        badge: '⭐ وسام التفوق والسرعة الذهنية',
+        badge: '⭐ وسام التفوق والسرعة الذهنية — بلية ودماغه عالية!',
         subtitle: 'لتحقيق درجات متميزة في مجالات الذكاء والتفكير المنطقي والعلوم',
       },
       school_champion: {
         title: '🏫 شهادة بطل المدرسة الأول',
         badge: '🥇 وسام المركز الأول على مستوى المدرسة',
-        subtitle: `لتصدر ترتيب طلاب ${selectedCertStudent.schoolName || 'المدرسة'} بجدارة`,
+        subtitle: `لتصدر ترتيب طلاب ${eligibleCertStudent.schoolName || 'المدرسة'} بجدارة`,
       },
       governorate_champion: {
         title: '🗺️ شهادة بطل المحافظة',
-        badge: `👑 وسام عبقري محافظة ${selectedCertStudent.governorate || 'القاهرة'}`,
-        subtitle: `لتصدر التصفيات على مستوى محافظة ${selectedCertStudent.governorate || 'القاهرة'}`,
+        badge: `👑 وسام بطل محافظة ${eligibleCertStudent.governorate || 'القاهرة'}`,
+        subtitle: `لتصدر التصفيات على مستوى محافظة ${eligibleCertStudent.governorate || 'القاهرة'}`,
       },
       republic_genius: {
-        title: '🇪🇬 شهادة عبقري الجمهورية',
-        badge: '🏆 الوسام الذهبي الأعلى — عبقري الجمهورية في عيون مصر',
-        subtitle: 'لتحقيق صدارة الجمهورية في مسابقة عباقرة عيون مصر للمعرفة والذكاء والتفكير',
+        title: '🇪🇬 شهادة بطل الجمهورية — دماغ عالية',
+        badge: '🏆 الوسام الذهبي الأعلى — بطل الجمهورية في دماغ عالية',
+        subtitle: 'لتحقيق صدارة الجمهورية في مسابقة دماغ عالية — مسابقة المعرفة والذكاء والتفكير',
       },
     };
     const currentCert = certMetaMap[certType];
@@ -2092,20 +2187,20 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
               📜 مركز إصدار الشهادات الرقمية المعتمدة (#25)
             </span>
             <h2 className="text-2xl font-bold text-white font-display mt-0.5">
-              إصدار وطباعة شهادات مسابقة «عباقرة عيون مصر»
+              إصدار وطباعة شهادات مسابقة «دماغ عالية»
             </h2>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <select
-              value={selectedCertStudent.id}
+              value={eligibleCertStudent.id}
               onChange={(e) => {
-                const found = students.find((s) => s.id === e.target.value);
+                const found = eligibleStudents.find((s) => s.id === e.target.value);
                 if (found) onSelectStudent(found);
               }}
               className="px-3.5 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl text-white font-bold"
             >
-              {students.map((s) => (
+              {eligibleStudents.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} — {s.schoolName} ({s.governorate})
                 </option>
@@ -2153,8 +2248,8 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
         {/* Printable Luxury Certificate */}
         <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-[#17284A] via-[#111C35] to-[#090F1D] border-4 border-double border-amber-400 text-center space-y-6 shadow-2xl">
           <div className="flex items-center justify-between text-xs text-amber-300/90 border-b border-amber-400/20 pb-4">
-            <span>🇪🇬 جمهورية مصر العربية · مسابقة عباقرة عيون مصر الوطنية</span>
-            <span className="font-mono-num">كود التوثيق: {selectedCertStudent.participationCode}-2026</span>
+            <span>🇪🇬 جمهورية مصر العربية · مسابقة دماغ عالية — مسابقة المعرفة والذكاء والتفكير</span>
+            <span className="font-mono-num">كود التوثيق: {eligibleCertStudent.participationCode}-2026</span>
           </div>
 
           <div className="space-y-2">
@@ -2166,31 +2261,31 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
           </div>
 
           <div className="p-6 rounded-2xl bg-slate-950/90 border border-amber-400/40 max-w-2xl mx-auto space-y-3">
-            <div className="text-xs text-slate-400">تشهد إدارة مسابقة «عباقرة عيون مصر» بمنح هذه الشهادة إلى الطالب/ـة:</div>
+            <div className="text-xs text-slate-400">تشهد إدارة مسابقة «دماغ عالية — مسابقة المعرفة والذكاء والتفكير» بمنح هذه الشهادة إلى الطالب/ـة:</div>
             <div className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-display">
-              {selectedCertStudent.name}
+              {eligibleCertStudent.name}
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-emerald-300 font-bold pt-1">
-              <span>🎓 {STAGE_METADATA[stg].label} ({GRADE_LABELS[selectedCertStudent.grade]})</span>
+              <span>🎓 {STAGE_METADATA[stg].label} ({GRADE_LABELS[eligibleCertStudent.grade]})</span>
               <span>·</span>
-              <span>🏫 {selectedCertStudent.schoolName || 'مدرسة عيون مصر'}</span>
+              <span>🏫 {eligibleCertStudent.schoolName || 'مدرسة مشاركة'}</span>
               <span>·</span>
-              <span>🏛️ {selectedCertStudent.administration || 'إدارة تعليمية'}</span>
+              <span>🏛️ {eligibleCertStudent.administration || 'إدارة تعليمية'}</span>
               <span>·</span>
-              <span>🗺️ محافظة {selectedCertStudent.governorate || 'القاهرة'}</span>
+              <span>🗺️ محافظة {eligibleCertStudent.governorate || 'القاهرة'}</span>
             </div>
             <div className="pt-3 border-t border-slate-800 flex flex-wrap items-center justify-center gap-6 text-xs">
               <span>
-                الدرجة الكلية: <strong className="font-mono-num text-amber-400">{selectedCertStudent.scores.total} نقطة</strong>
+                الدرجة الكلية: <strong className="font-mono-num text-amber-400">{eligibleCertStudent.scores.total} نقطة</strong>
               </span>
               <span>
-                ترتيب المدرسة: <strong className="font-mono-num text-emerald-400">#{selectedCertStudent.schoolRank || 1}</strong>
+                ترتيب المدرسة: <strong className="font-mono-num text-emerald-400">#{eligibleCertStudent.schoolRank || 1}</strong>
               </span>
               <span>
-                ترتيب المحافظة: <strong className="font-mono-num text-sky-400">#{selectedCertStudent.governorateRank || 1}</strong>
+                ترتيب المحافظة: <strong className="font-mono-num text-sky-400">#{eligibleCertStudent.governorateRank || 1}</strong>
               </span>
               <span>
-                ترتيب الجمهورية: <strong className="font-mono-num text-amber-300">#{selectedCertStudent.republicRank || 1}</strong>
+                ترتيب الجمهورية: <strong className="font-mono-num text-amber-300">#{eligibleCertStudent.republicRank || 1}</strong>
               </span>
             </div>
           </div>
@@ -2201,8 +2296,8 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
               <div className="mt-1 text-slate-400">اعتماد إلكتروني رسمي ✓</div>
             </div>
             <div>
-              <div className="font-bold text-amber-400">ختم منصة عباقرة عيون مصر</div>
-              <div className="mt-1 font-mono-num text-slate-400">OYOUN MISR 2026</div>
+              <div className="font-bold text-amber-400">ختم منصة دماغ عالية</div>
+              <div className="mt-1 font-mono-num text-slate-400">DEMAGH ALYA · 👦 بلية ودماغه عالية!</div>
             </div>
           </div>
         </div>
@@ -2218,13 +2313,24 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
             🏛️ سجل المواسم الوطنية وأرشيف الأبطال (#23)
           </span>
           <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
-            مواسم مسابقة «عباقرة عيون مصر» عبر السنوات
+            مواسم مسابقة «دماغ عالية» عبر السنوات
           </h2>
           <p className="text-xs text-slate-300">
             توثيق رسمي للمواسم الحالية والقادمة وأبطال كل مرحلة وأفضل المدارس والمحافظات.
           </p>
         </div>
 
+        {seasonsArchive.length === 0 ? (
+          <div className="p-10 rounded-3xl bg-[#131F38] border border-dashed border-slate-700 text-center space-y-2">
+            <div className="text-3xl">🏛️</div>
+            <h3 className="text-lg font-bold text-white font-display">
+              أرشيف المواسم فارغ حالياً — سيتم إضافة المحتوى قريبًا عند ختام وأرشفة الموسم الفعلي
+            </h3>
+            <p className="text-xs text-slate-400 max-w-xl mx-auto">
+              لا يتم وضع مواسم أو أبطال وهميين في الأرشيف. عند انتهاء الموسم الحالي وأرشفته من لوحة المشرفة العامة، سيُحفظ هنا ببياناته الحقيقية.
+            </p>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {seasonsArchive.map((season) => (
             <div
@@ -2294,6 +2400,7 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
             </div>
           ))}
         </div>
+        )}
       </section>
     );
   }
@@ -2307,10 +2414,10 @@ export const NationalPlatformHub: React.FC<NationalPlatformHubProps> = ({
           <span>🛡️ هوية المسابقة الوطنية · العدالة · حماية خصوصية الأطفال (#31)</span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-bold text-white font-display">
-          عن مسابقة «عباقرة عيون مصر» — مسابقة الجمهورية للمعرفة والذكاء والتفكير
+          عن مسابقة «دماغ عالية» — مسابقة المعرفة والذكاء والتفكير
         </h2>
         <p className="text-sm text-slate-300 leading-relaxed">
-          «عيون مصر» هي اسم وهوية المسابقة الوطنية التفاعلية المفتوحة لجميع طلاب المدارس الحكومية والرسمية للغات والخاصة والأزهرية والدولية في جميع محافظات جمهورية مصر العربية الـ٢٧، وليست مقتصرة على مدرسة واحدة.
+          «دماغ عالية» (بصحبة شخصية المسابقة الرسمية: <strong>👦 بلية — بلية ودماغه عالية!</strong>) هي المسابقة التفاعلية للمعرفة والذكاء والتفكير المفتوحة لجميع طلاب المدارس الحكومية والرسمية للغات والخاصة والأزهرية والدولية في جميع محافظات جمهورية مصر العربية الـ٢٧.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
